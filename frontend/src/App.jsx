@@ -4,6 +4,102 @@ import "./App.css";
 const API_URL = "http://127.0.0.1:8000/chat";
 const MAX_HISTORY_MESSAGES = 10;
 const MAX_HISTORY_CONTENT_LENGTH = 2000;
+const STORAGE_KEY = "online-shopping-legal-chat-messages";
+const MAX_STORED_MESSAGES = 30;
+const MAX_STORED_SOURCE_CONTENT_LENGTH = 2500;
+
+function truncateText(value, maxLength) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.slice(0, maxLength);
+}
+
+function prepareMessagesForStorage(messages) {
+  return messages
+    .filter(
+      (message) =>
+        (message.role === "user" ||
+          message.role === "assistant") &&
+        typeof message.content === "string" &&
+        message.content.trim()
+    )
+    .slice(-MAX_STORED_MESSAGES)
+    .map((message) => ({
+      id:
+        typeof message.id === "string"
+          ? message.id
+          : `${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2)}`,
+      role: message.role,
+      content: message.content,
+      sources: Array.isArray(message.sources)
+        ? message.sources.slice(0, 3).map((source) => ({
+            rank: source.rank,
+            heading: source.heading,
+            heading_path: source.heading_path,
+            source_file: source.source_file,
+            file_name: source.file_name,
+            parent_id: source.parent_id,
+            child_content: truncateText(
+              source.child_content,
+              MAX_STORED_SOURCE_CONTENT_LENGTH
+            ),
+            parent_content: truncateText(
+              source.parent_content,
+              MAX_STORED_SOURCE_CONTENT_LENGTH
+            ),
+            content: truncateText(
+              source.content,
+              MAX_STORED_SOURCE_CONTENT_LENGTH
+            ),
+            text: truncateText(
+              source.text,
+              MAX_STORED_SOURCE_CONTENT_LENGTH
+            ),
+            excerpt: truncateText(
+              source.excerpt,
+              MAX_STORED_SOURCE_CONTENT_LENGTH
+            ),
+            dense_score: source.dense_score,
+            rerank_score: source.rerank_score,
+            score: source.score,
+            similarity_score: source.similarity_score,
+            rank_group: source.rank_group,
+            retrieved_by: source.retrieved_by,
+          }))
+        : [],
+    }));
+}
+
+function loadStoredMessages() {
+  try {
+    const storedValue = window.localStorage.getItem(
+      STORAGE_KEY
+    );
+
+    if (!storedValue) {
+      return [];
+    }
+
+    const parsedMessages = JSON.parse(storedValue);
+
+    if (!Array.isArray(parsedMessages)) {
+      return [];
+    }
+
+    return prepareMessagesForStorage(parsedMessages);
+  } catch (storageError) {
+    console.error(
+      "저장된 대화를 불러오지 못했습니다.",
+      storageError
+    );
+
+    return [];
+  }
+}
 
 function getSourceScore(source) {
   const score =
@@ -127,7 +223,9 @@ function SourceList({ sources }) {
 
 function App() {
   const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(
+    loadStoredMessages
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -140,6 +238,28 @@ function App() {
       block: "end",
     });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    try {
+      if (messages.length === 0) {
+        window.localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+
+      const storedMessages =
+        prepareMessagesForStorage(messages);
+
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(storedMessages)
+      );
+    } catch (storageError) {
+      console.error(
+        "대화를 저장하지 못했습니다.",
+        storageError
+      );
+    }
+  }, [messages]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
