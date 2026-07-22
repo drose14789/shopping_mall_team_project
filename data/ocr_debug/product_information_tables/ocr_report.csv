@@ -1,0 +1,41 @@
+﻿품목번호,품목명,PDF페이지,인식줄수,평균신뢰도,낮은신뢰도줄수,낮은신뢰도문장,검토이미지
+1,의류,3,9,0.9788,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\01_의류.png
+2,구두 / 신발,3,10,0.9656,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\02_구두 _ 신발.png
+3,가방,3,9,0.9606,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\03_가방.png
+4,패션잡화 (모자 / 벨트 / 액세서리 등),4,8,0.9726,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\04_패션잡화 (모자 _ 벨트 _ 액세서리 등).png
+5,침구류 / 커튼,4,10,0.9325,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\05_침구류 _ 커튼.png
+6,가구 (침대 / 소파 / 싱크대 / DIY제품 등),4,18,0.9543,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\06_가구 (침대 _ 소파 _ 싱크대 _ DIY제품 등).png
+7,영상가전 (TV류),5,13,0.9452,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\07_영상가전 (TV류).png
+8,가정용 전기제품 (냉장고 / 세탁기 / 식기세척기 / 전자레인지 등),5,12,0.9359,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\08_가정용 전기제품 (냉장고 _ 세탁기 _ 식기세척기 _ 전자레인지 등).png
+9,계절가전 (에어컨 / 온풍기 등),5,13,0.9384,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\09_계절가전 (에어컨 _ 온풍기 등).png
+10,사무용기기 (컴퓨터 / 노트북 / 프린터 등),6,14,0.9412,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\10_사무용기기 (컴퓨터 _ 노트북 _ 프린터 등).png
+11,광학기기 (디지털카메라 / 캠코더 등),6,10,0.9503,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\11_광학기기 (디지털카메라 _ 캠코더 등).png
+12,소형전자 (MP3 / 전자사전 등),6,11,0.9509,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\12_소형전자 (MP3 _ 전자사전 등).png
+13,휴대형 통신기기 (휴대폰 / 태블릿 등),7,15,0.9514,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\13_휴대형 통신기기 (휴대폰 _ 태블릿 등).png
+14,내비게이션,7,11,0.9486,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\14_내비게이션.png
+15,자동차용품 (자동차부품 / 기타 자동차용품 등),7,13,0.9455,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\15_자동차용품 (자동차부품 _ 기타 자동차용품 등).png
+16,의료기기,8,11,0.9511,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\16_의료기기.png
+17,주방용품,8,12,0.9445,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\17_주방용품.png
+18,화장품,8,11,0.9622,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\18_화장품.png
+19,귀금속 / 보석 / 시계류,9,13,0.9509,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\19_귀금속 _ 보석 _ 시계류.png
+20,농수축산물,9,17,0.9408,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\20_농수축산물.png
+21,가공식품,9,15,0.9236,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\21_가공식품.png
+22,건강기능식품,10,16,0.9456,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\22_건강기능식품.png
+23,어린이제품,10,15,0.9545,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\23_어린이제품.png
+24,악기,11,12,0.9346,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\24_악기.png
+25,스포츠용품,11,13,0.9608,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\25_스포츠용품.png
+26,서적,11,9,0.9460,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\26_서적.png
+27,호텔 / 펜션 예약,11,7,0.8988,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\27_호텔 _ 펜션 예약.png
+28,여행패키지,12,21,0.9371,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\28_여행패키지.png
+29,항공권,12,9,0.9366,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\29_항공권.png
+30,자동차 대여 서비스 (렌터카),12,7,0.9340,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\30_자동차 대여 서비스 (렌터카).png
+31,"물품대여 서비스 (정수기, 비데, 공기청정기 등)",13,8,0.9287,0,,"C:\yolo\llm\data\ocr_debug\product_information_tables\31_물품대여 서비스 (정수기, 비데, 공기청정기 등).png"
+32,"물품대여 서비스 (서적, 유아용품, 행사용품 등)",13,6,0.9401,0,,"C:\yolo\llm\data\ocr_debug\product_information_tables\32_물품대여 서비스 (서적, 유아용품, 행사용품 등).png"
+33,"디지털 콘텐츠 (음원, 게임, 인터넷강의 등)",13,6,0.9411,0,,"C:\yolo\llm\data\ocr_debug\product_information_tables\33_디지털 콘텐츠 (음원, 게임, 인터넷강의 등).png"
+34,상품권 / 쿠폰,13,5,0.9620,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\34_상품권 _ 쿠폰.png
+35,모바일 쿠폰,13,5,0.9460,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\35_모바일 쿠폰.png
+36,영화ㆍ공연,14,8,0.9456,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\36_영화ㆍ공연.png
+37,생활화학제품,14,17,0.9548,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\37_생활화학제품.png
+38,살생물제품,14,15,0.9463,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\38_살생물제품.png
+39,기타 용역,15,6,0.9302,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\39_기타 용역.png
+40,기타 재화,15,5,0.9428,0,,C:\yolo\llm\data\ocr_debug\product_information_tables\40_기타 재화.png

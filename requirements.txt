@@ -1,0 +1,11 @@
+kiwipiepy
+pymupdf
+pillow 
+numpy
+paddlepaddle
+paddleocr
+markdown-it-py requests
+-U sentence-transformers
+-U qdrant-client
+fastapi
+uvicorn
