@@ -174,6 +174,46 @@ def get_recent_user_messages(
     return user_messages[-limit:]
 
 
+def contains_mismatch_expression(text: str) -> bool:
+    """
+    상품 설명·사진·광고와 실제 상품이 다르다는 표현을 확인합니다.
+    """
+    normalized = normalize_question(text)
+
+    mismatch_terms = (
+        "상품설명과달",
+        "설명과달",
+        "사진과달",
+        "광고와달",
+        "이미지와달",
+        "상세페이지와달",
+        "실제상품과달",
+        "실제상품이달",
+        "상품이사진과달",
+        "불량",
+        "하자",
+        "오배송",
+    )
+
+    return any(
+        term in normalized
+        for term in mismatch_terms
+    )
+
+
+def resolve_initial_legal_statement(question: str) -> str:
+    """
+    질문형이 아닌 짧은 상황 설명을 검색 가능한 법률 질문으로 바꿉니다.
+    """
+    if contains_mismatch_expression(question):
+        return (
+            "상품 설명과 실제 상품이 다르면 "
+            "언제까지 반품할 수 있나요?"
+        )
+
+    return question
+
+
 def is_shipping_cost_followup(question: str) -> bool:
     """
     현재 질문이 배송비 또는 반품비를 묻는 짧은 후속 질문인지 확인합니다.
@@ -188,7 +228,7 @@ def is_shipping_cost_followup(question: str) -> bool:
         "비용",
     )
 
-    question_terms = (
+    explicit_question_terms = (
         "누가",
         "부담",
         "내야",
@@ -198,17 +238,89 @@ def is_shipping_cost_followup(question: str) -> bool:
         "어떻게",
     )
 
+    followup_terms = (
+        "그럼",
+        "그러면",
+        "그렇다면",
+        "그건",
+        "그거",
+        "그비용",
+    )
+
     has_cost_term = any(
         term in normalized
         for term in cost_terms
     )
 
-    has_question_term = any(
+    has_explicit_question = any(
         term in normalized
-        for term in question_terms
+        for term in explicit_question_terms
     )
 
-    return has_cost_term and has_question_term
+    has_followup_expression = any(
+        term in normalized
+        for term in followup_terms
+    )
+
+    is_short_cost_question = (
+        has_cost_term
+        and len(normalized) <= 15
+    )
+
+    return has_cost_term and (
+        has_explicit_question
+        or has_followup_expression
+        or is_short_cost_question
+    )
+
+
+def is_deadline_followup(question: str) -> bool:
+    """
+    현재 질문이 반품 가능 기간을 묻는 짧은 후속 질문인지 확인합니다.
+    """
+    normalized = normalize_question(question)
+
+    deadline_terms = (
+        "언제까지",
+        "며칠",
+        "몇일",
+        "기간",
+        "기한",
+        "한달지나도",
+        "지나도",
+    )
+
+    followup_terms = (
+        "그럼",
+        "그러면",
+        "그렇다면",
+        "그건",
+        "그거",
+    )
+
+    return (
+        any(term in normalized for term in deadline_terms)
+        and (
+            any(term in normalized for term in followup_terms)
+            or len(normalized) <= 18
+        )
+    )
+
+
+def get_previous_context(
+    history: list[dict[str, str]],
+) -> str:
+    """
+    최근 사용자 질문을 하나의 정규화된 문장으로 합칩니다.
+    """
+    recent_user_messages = get_recent_user_messages(
+        history=history,
+        limit=3,
+    )
+
+    return normalize_question(
+        " ".join(recent_user_messages)
+    )
 
 
 def resolve_followup_question(
@@ -218,22 +330,17 @@ def resolve_followup_question(
     """
     최근 사용자 질문을 참고해 짧은 후속 질문을 독립적인 질문으로 바꿉니다.
 
-    현재 단계에서는 반품 배송비 후속 질문만 처리합니다.
+    지원하는 후속 질문:
+    - 반품 배송비
+    - 상품 불일치 반품 기한
     """
-    if not history or not is_shipping_cost_followup(question):
+    if not history:
         return question
 
-    recent_user_messages = get_recent_user_messages(
-        history=history,
-        limit=3,
-    )
+    previous_context = get_previous_context(history)
 
-    if not recent_user_messages:
+    if not previous_context:
         return question
-
-    previous_context = normalize_question(
-        " ".join(recent_user_messages)
-    )
 
     change_of_mind_terms = (
         "단순변심",
@@ -243,16 +350,6 @@ def resolve_followup_question(
         "필요없",
     )
 
-    mismatch_terms = (
-        "상품설명과다르",
-        "사진과다르",
-        "광고와다르",
-        "실제상품이다르",
-        "불량",
-        "하자",
-        "오배송",
-    )
-
     return_terms = (
         "반품",
         "청약철회",
@@ -260,26 +357,47 @@ def resolve_followup_question(
         "환불",
     )
 
-    if any(
-        term in previous_context
-        for term in change_of_mind_terms
-    ):
-        return "단순 변심 반품 배송비는 누가 부담하나요?"
+    previous_is_mismatch = contains_mismatch_expression(
+        previous_context
+    )
 
-    if any(
-        term in previous_context
-        for term in mismatch_terms
-    ):
-        return (
-            "상품 설명과 실제 상품이 다르거나 하자가 있는 경우 "
-            "반품 배송비는 누가 부담하나요?"
-        )
+    if is_shipping_cost_followup(question):
+        if any(
+            term in previous_context
+            for term in change_of_mind_terms
+        ):
+            return "단순 변심 반품 배송비는 누가 부담하나요?"
 
-    if any(
-        term in previous_context
-        for term in return_terms
-    ):
-        return "반품 배송비는 누가 부담하나요?"
+        if previous_is_mismatch:
+            return (
+                "상품 설명과 실제 상품이 다르거나 하자가 있는 경우 "
+                "반품 배송비는 누가 부담하나요?"
+            )
+
+        if any(
+            term in previous_context
+            for term in return_terms
+        ):
+            return "반품 배송비는 누가 부담하나요?"
+
+    if is_deadline_followup(question):
+        if previous_is_mismatch:
+            return (
+                "상품 설명과 실제 상품이 다르면 "
+                "언제까지 반품할 수 있나요?"
+            )
+
+        if any(
+            term in previous_context
+            for term in change_of_mind_terms
+        ):
+            return "단순 변심 반품은 언제까지 할 수 있나요?"
+
+        if any(
+            term in previous_context
+            for term in return_terms
+        ):
+            return "반품은 언제까지 할 수 있나요?"
 
     return question
 
@@ -294,7 +412,8 @@ def answer_chat(
     - 챗봇 소개 질문: 고정 답변
     - 짧은 인사·감사·일상 대화: 고정 답변
     - 자유로운 일부 일반 대화: 빠른 1B 모델
-    - 반품 배송비 후속 질문: 이전 질문을 반영해 보완
+    - 짧은 상황 설명: 검색 가능한 법률 질문으로 변환
+    - 짧은 후속 질문: 이전 질문을 반영해 보완
     - 나머지 질문: 기존 법률 RAG
     """
     cleaned_question = " ".join(question.split())
@@ -338,6 +457,11 @@ def answer_chat(
         question=cleaned_question,
         history=history,
     )
+
+    if resolved_question == cleaned_question:
+        resolved_question = resolve_initial_legal_statement(
+            cleaned_question
+        )
 
     result = answer_question(resolved_question)
 

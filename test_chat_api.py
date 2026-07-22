@@ -4,7 +4,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 API_URL = "http://127.0.0.1:8000/chat"
@@ -16,6 +16,10 @@ class TestCase:
     name: str
     question: str
     required_terms: tuple[str, ...]
+    expected_intent: str | None = None
+    history: tuple[dict[str, str], ...] = field(
+        default_factory=tuple
+    )
     forbidden_terms: tuple[str, ...] = (
         "질문에 직접 답변할 수 있는 근거 문서를 찾지 못했습니다",
         "$28",
@@ -39,6 +43,7 @@ TEST_CASES = (
         name="상품 불일치 반품 기한",
         question="상품 설명과 실제 상품이 다르면 언제까지 반품할 수 있나요?",
         required_terms=("3개월 이내", "30일 이내"),
+        expected_intent="mismatch_return_deadline",
     ),
     TestCase(
         name="품절 환불",
@@ -49,6 +54,7 @@ TEST_CASES = (
         name="반품 비용 부담",
         question="반품 배송비는 누가 부담하나요?",
         required_terms=("소비자가 부담", "판매자가 반환 비용을 부담"),
+        expected_intent="return_cost",
     ),
     TestCase(
         name="반품 방해",
@@ -85,12 +91,65 @@ TEST_CASES = (
         question="주문한 물건이 품절됐다고 하는데 결제한 돈은 언제 돌려받나요?",
         required_terms=("3영업일 이내", "환급"),
     ),
+    TestCase(
+        name="상황 설명 - 사진과 다른 상품",
+        question="상품이 사진과 달라요.",
+        required_terms=("3개월 이내", "30일 이내"),
+        expected_intent="mismatch_return_deadline",
+    ),
+    TestCase(
+        name="후속 질문 - 단순 변심 배송비",
+        question="그럼 배송비는?",
+        history=(
+            {
+                "role": "user",
+                "content": "단순 변심으로 반품할 수 있나요?",
+            },
+            {
+                "role": "assistant",
+                "content": (
+                    "일반적으로 상품을 받은 날부터 "
+                    "7일 이내 반품할 수 있습니다."
+                ),
+            },
+        ),
+        required_terms=(
+            "택배비는 소비자가 부담",
+            "판매자가 반환 비용을 부담",
+        ),
+        expected_intent="return_cost",
+    ),
+    TestCase(
+        name="후속 질문 - 상품 불일치 반품 기한",
+        question="그럼 언제까지?",
+        history=(
+            {
+                "role": "user",
+                "content": "상품이 사진과 달라요.",
+            },
+            {
+                "role": "assistant",
+                "content": (
+                    "상품 설명과 실제 상품이 다른 경우 "
+                    "반품할 수 있습니다."
+                ),
+            },
+        ),
+        required_terms=("3개월 이내", "30일 이내"),
+        expected_intent="mismatch_return_deadline",
+    ),
 )
 
 
-def request_chat(question: str) -> dict:
+def request_chat(
+    question: str,
+    history: tuple[dict[str, str], ...] = (),
+) -> dict:
     payload = json.dumps(
-        {"question": question},
+        {
+            "question": question,
+            "history": list(history),
+        },
         ensure_ascii=False,
     ).encode("utf-8")
 
@@ -112,9 +171,16 @@ def request_chat(question: str) -> dict:
         return json.loads(response_body)
 
 
-def run_test(test_case: TestCase) -> tuple[bool, list[str]]:
-    result = request_chat(test_case.question)
+def run_test(
+    test_case: TestCase,
+) -> tuple[bool, list[str]]:
+    result = request_chat(
+        question=test_case.question,
+        history=test_case.history,
+    )
+
     answer = str(result.get("answer", ""))
+    intent = result.get("intent")
 
     errors: list[str] = []
 
@@ -129,7 +195,29 @@ def run_test(test_case: TestCase) -> tuple[bool, list[str]]:
         if term in answer:
             errors.append(f"금지 문구 포함: {term}")
 
+    if (
+        test_case.expected_intent is not None
+        and intent != test_case.expected_intent
+    ):
+        errors.append(
+            "intent 불일치: "
+            f"예상={test_case.expected_intent}, 실제={intent}"
+        )
+
     return not errors, errors
+
+
+def print_history(
+    history: tuple[dict[str, str], ...],
+) -> None:
+    if not history:
+        return
+
+    print("이전 대화:")
+    for message in history:
+        role = message.get("role", "")
+        content = message.get("content", "")
+        print(f"  - {role}: {content}")
 
 
 def main() -> int:
@@ -141,25 +229,38 @@ def main() -> int:
     print(f"API URL: {API_URL}")
     print("=" * 72)
 
-    for index, test_case in enumerate(TEST_CASES, start=1):
-        print(f"\n[{index}/{len(TEST_CASES)}] {test_case.name}")
+    for index, test_case in enumerate(
+        TEST_CASES,
+        start=1,
+    ):
+        print(
+            f"\n[{index}/{len(TEST_CASES)}] "
+            f"{test_case.name}"
+        )
+        print_history(test_case.history)
         print(f"질문: {test_case.question}")
 
         try:
             success, errors = run_test(test_case)
+
         except urllib.error.HTTPError as exc:
             success = False
-            body = exc.read().decode("utf-8", errors="replace")
+            body = exc.read().decode(
+                "utf-8",
+                errors="replace",
+            )
             errors = [
                 f"HTTP 오류: {exc.code} {exc.reason}",
                 f"응답: {body}",
             ]
+
         except urllib.error.URLError as exc:
             success = False
             errors = [
                 "FastAPI 서버에 연결할 수 없습니다.",
                 f"상세: {exc.reason}",
             ]
+
         except Exception as exc:
             success = False
             errors = [
