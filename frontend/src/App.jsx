@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
 const API_URL = "http://127.0.0.1:8000/chat";
+const MAX_HISTORY_MESSAGES = 10;
+const MAX_HISTORY_CONTENT_LENGTH = 2000;
 
 function getSourceScore(source) {
   const score =
@@ -43,6 +45,24 @@ function createMessage(role, content, sources = []) {
     content,
     sources,
   };
+}
+
+function buildRequestHistory(messages) {
+  return messages
+    .filter(
+      (message) =>
+        (message.role === "user" ||
+          message.role === "assistant") &&
+        typeof message.content === "string" &&
+        message.content.trim()
+    )
+    .slice(-MAX_HISTORY_MESSAGES)
+    .map((message) => ({
+      role: message.role,
+      content: message.content
+        .trim()
+        .slice(0, MAX_HISTORY_CONTENT_LENGTH),
+    }));
 }
 
 function SourceList({ sources }) {
@@ -136,6 +156,9 @@ function App() {
       return;
     }
 
+    // 현재 질문을 추가하기 전의 대화만 history로 보냅니다.
+    const requestHistory = buildRequestHistory(messages);
+
     const userMessage = createMessage(
       "user",
       trimmedQuestion
@@ -158,6 +181,7 @@ function App() {
         },
         body: JSON.stringify({
           question: trimmedQuestion,
+          history: requestHistory,
         }),
       });
 
