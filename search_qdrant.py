@@ -81,11 +81,31 @@ PLATFORM_TERMS = (
 SELLER_INFO_TERMS = (
     "판매자 정보",
     "판매자정보",
+    "판매자의 정보",
+    "판매자 정보를",
     "사업자 정보",
     "사업자정보",
+    "사업자의 정보",
+    "사업자 정보를",
     "판매자 신원",
+    "판매자의 신원",
     "판매자 연락처",
+    "판매자의 연락처",
     "판매자가 누구",
+)
+
+SELLER_TERMS = (
+    "판매자",
+    "사업자",
+)
+
+SELLER_DETAIL_TERMS = (
+    "정보",
+    "신원",
+    "연락처",
+    "주소",
+    "전화번호",
+    "성명",
 )
 
 PERSONAL_TERMS = (
@@ -148,6 +168,31 @@ def has_any(
     )
 
 
+def is_seller_info_question(
+    question: str,
+) -> bool:
+    """
+    '판매자 정보'뿐 아니라 '판매자의 정보'처럼
+    조사가 들어간 표현도 판매자 정보 질문으로 인식합니다.
+    """
+    if has_any(
+        question,
+        SELLER_INFO_TERMS,
+    ):
+        return True
+
+    return (
+        has_any(
+            question,
+            SELLER_TERMS,
+        )
+        and has_any(
+            question,
+            SELLER_DETAIL_TERMS,
+        )
+    )
+
+
 def detect_intent(question: str) -> str | None:
     if (
         has_any(question, SIMPLE_CHANGE_TERMS)
@@ -157,7 +202,7 @@ def detect_intent(question: str) -> str | None:
 
     if not (
         has_any(question, PLATFORM_TERMS)
-        and has_any(question, SELLER_INFO_TERMS)
+        and is_seller_info_question(question)
     ):
         return None
 
