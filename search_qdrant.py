@@ -2,12 +2,29 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-PARENT_FILE = Path(r"C:\yolo\llm\data\chunks\documents.parents.jsonl")
-QDRANT_URL = "http://localhost:6333"
+BASE_DIR = Path(__file__).resolve().parent
+
+PARENT_FILE = Path(
+    os.getenv(
+        "PARENT_FILE",
+        str(
+            BASE_DIR
+            / "data"
+            / "chunks"
+            / "documents.parents.jsonl"
+        ),
+    )
+)
+
+QDRANT_URL = os.getenv(
+    "QDRANT_URL",
+    "http://127.0.0.1:6333",
+)
 COLLECTION_NAME = "legal_chunks"
 EMBED_MODEL = "BAAI/bge-m3"
 RERANK_MODEL = "BAAI/bge-reranker-v2-m3"

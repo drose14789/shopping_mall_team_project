@@ -11,6 +11,7 @@ from app.services.evidence_selector import (
     select_evidence_documents,
 )
 from app.services.intent_router import analyze_question
+from app.services.legal_rules import get_legal_rule
 from app.services.query_builder import build_search_query
 from app.services.ollama_service import generate_answer
 from app.services.qdrant_service import search_documents
@@ -40,6 +41,11 @@ GENERAL_LEGAL_QUERY_TEMPLATES = {
         "전자상거래법과 전자상거래 표준약관에서 주문한 상품과 "
         "다른 상품이 배송된 경우 반환 비용의 부담 주체"
     ),
+    "return_cost": (
+        "전자상거래법 제18조에 따른 단순 변심 청약철회와 "
+        "표시·광고 또는 계약 내용과 다른 상품의 반환 비용 "
+        "부담 주체 및 위약금·손해배상 청구 제한"
+    ),
     "carrier_blame_return_cost": (
         "전자상거래법과 전자상거래 표준약관에서 계약 내용과 "
         "다른 상품 또는 배송 중 파손 상품의 반환 비용과 "
@@ -53,13 +59,19 @@ GENERAL_LEGAL_QUERY_TEMPLATES = {
         "전자상거래법과 전자상거래 표준약관에서 단순 변심으로 "
         "청약철회할 수 있는 기간과 반환 비용"
     ),
-    "out_of_stock_refund": (
-        "전자상거래법과 전자상거래 표준약관에서 상품 품절로 "
-        "공급할 수 없는 경우 통지와 대금 환급 기한"
+    "sold_out_refund": (
+        "전자상거래법과 전자상거래 표준약관에서 상품 품절 또는 "
+        "재고 부족으로 공급할 수 없는 경우 소비자에게 지체 없이 "
+        "알리고, 선결제 대금을 지급받은 날부터 3영업일 이내에 "
+        "환급하거나 환급에 필요한 조치를 해야 하는 기준"
     ),
     "return_obstruction": (
-        "전자상거래법에서 소비자의 청약철회와 반품을 방해하는 "
-        "판매자의 금지행위"
+        "전자상거래법상 판매자가 거짓 또는 과장된 사실을 알리거나 "
+        "기만적인 방법으로 소비자의 청약철회 또는 계약 해지를 "
+        "방해해서는 안 되는 기준과, 세일·특가 상품의 일률적 "
+        "반품 제한, 법정 청약철회 기간의 임의 축소, 반환 배송비 "
+        "외 인건비·운송비·포장비·보관비·취소수수료·반품위약금 "
+        "등 추가 금액 요구 금지 사례"
     ),
 }
 
@@ -128,6 +140,70 @@ def resolve_structured_intent(
         return None
 
     return analysis.legacy_intent
+
+
+def sanitize_source_documents(
+    documents: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    화면에 표시되는 출처 제목과 파일명의 앞뒤 불필요한
+    Markdown 표 기호와 공백을 제거한다.
+    """
+    sanitized_documents: list[dict[str, Any]] = []
+
+    for document in documents:
+        sanitized_document = dict(document)
+
+        for key in (
+            "heading",
+            "source_file",
+        ):
+            value = str(
+                sanitized_document.get(key, "")
+            ).strip()
+
+            value = re.sub(
+                r"^[|\s]+|[|\s]+$",
+                "",
+                value,
+            )
+
+            sanitized_document[key] = value
+
+        sanitized_documents.append(
+            sanitized_document
+        )
+
+    return sanitized_documents
+
+
+def build_registered_rule_answer(
+    intent: str,
+) -> str:
+    """
+    legal_rules.py에 등록된 핵심 결론과 필수 문단으로
+    검증 완료 답변을 만든다.
+
+    Ollama 또는 answer_builder에서 오류가 발생했을 때도
+    같은 규칙을 사용하므로 답변 기준이 달라지지 않는다.
+    """
+    rule = get_legal_rule(intent)
+
+    if rule is None:
+        raise KeyError(
+            f"등록되지 않은 법률 intent입니다: {intent}"
+        )
+
+    paragraphs = [
+        rule.core_conclusion,
+        *rule.mandatory_paragraphs,
+    ]
+
+    return "\n\n".join(
+        paragraph.strip()
+        for paragraph in paragraphs
+        if paragraph.strip()
+    )
 
 
 def select_relevant_documents(
@@ -339,6 +415,10 @@ def is_replacement_defective_refund_question(
         "전원불량",
         "작동하지않",
         "작동안",
+        "작동이안",
+        "작동이안되",
+        "작동이안돼",
+        "작동이되지않",
         "정상작동하지않",
         "정상적으로작동하지않",
         "부팅되지않",
@@ -400,19 +480,9 @@ def is_replacement_defective_refund_question(
 
 
 def build_replacement_defective_refund_answer() -> str:
-    """교환·교체받은 상품에도 다시 고장이나 작동 문제가 있는 경우."""
-    return (
-        "교환 또는 교체받은 제품에도 다시 고장이나 작동 문제가 "
-        "발생했다면 판매자에게 환불을 요구할 수 있습니다.\n\n"
-        "다만 실제 환불 가능 여부는 제품 종류, 품질보증기간, "
-        "하자의 정도와 기존 수리·교환 이력에 따라 달라질 수 "
-        "있습니다. 따라서 제품 종류를 알 수 없는 상태에서 특정 "
-        "품목의 수리 횟수나 감가상각 기준을 바로 적용해서는 "
-        "안 됩니다.\n\n"
-        "온라인으로 구매한 제품이 표시·광고 또는 계약 내용과 "
-        "다르게 제공된 경우에는 상품을 공급받은 날부터 3개월 "
-        "이내이면서, 그 사실을 안 날 또는 알 수 있었던 날부터 "
-        "30일 이내에 청약철회를 요구할 수 있습니다."
+    """교환·교체 후 재불량 환불 규칙 답변을 반환한다."""
+    return build_registered_rule_answer(
+        "replacement_defective_refund"
     )
 
 
@@ -546,6 +616,7 @@ def is_mismatch_deadline_question(question: str) -> bool:
     return_terms = (
         "반품",
         "청약철회",
+        "철회",
         "환불",
         "돌려보",
         "돌려주",
@@ -581,20 +652,9 @@ def is_mismatch_deadline_question(question: str) -> bool:
 
 
 def build_mismatch_deadline_answer() -> str:
-    """
-    상품 설명 불일치 반품 기한 질문에 사용할 검증된 답변이다.
-
-    검색 결과는 sources로 그대로 반환하고, 기간을 Ollama가
-    잘못 조합하지 않도록 답변 문장만 통제한다.
-    """
-    return (
-        "상품이 표시·광고 내용과 다르거나 계약 내용과 다르게 "
-        "이행된 경우에는 상품을 공급받은 날부터 3개월 이내이면서, "
-        "그 사실을 안 날 또는 알 수 있었던 날부터 30일 이내에 "
-        "청약철회를 해야 합니다.\n\n"
-        "두 기간 중 어느 하나라도 지나면 청약철회가 어려울 수 "
-        "있으므로, 상품의 불일치를 확인한 뒤 가능한 한 빨리 "
-        "판매자에게 반품 의사를 알리는 것이 좋습니다."
+    """상품 불일치 청약철회 기한 규칙 답변을 반환한다."""
+    return build_registered_rule_answer(
+        "mismatch_return_deadline"
     )
 
 
@@ -1548,7 +1608,7 @@ def build_account_withdrawal_privacy_destruction_answer() -> str:
 def is_third_party_personal_data_provision_question(
     question: str,
 ) -> bool:
-    """동의 없는 개인정보 제3자 제공 질문을 확인한다."""
+    """개인정보 제3자 제공과 동의 필요 여부 질문을 확인한다."""
     normalized = normalize_text(question)
 
     privacy_terms = (
@@ -1570,21 +1630,41 @@ def is_third_party_personal_data_provision_question(
     )
 
     consent_terms = (
+        # 동의 없이 제공하는 경우
         "동의없이",
         "동의받지않",
         "동의안받",
         "허락없이",
         "모르게",
+
+        # 동의를 받아야 하는지 묻는 경우
+        "동의를받",
+        "동의받아야",
+        "동의가필요",
+        "동의필요",
+        "동의해야",
+        "허락받아야",
     )
 
-    permission_terms = (
+    direct_permission_terms = (
         "제공해도되",
         "넘겨도되",
         "전달해도되",
         "보내도되",
         "공유해도되",
+        "제공할수있",
+        "넘길수있",
+    )
+
+    question_terms = (
         "되나요",
         "돼나요",
+        "해야하나요",
+        "해야하나",
+        "받아야하나요",
+        "받아야하나",
+        "필요하나요",
+        "필요한가요",
         "가능",
         "괜찮",
         "문제",
@@ -1592,11 +1672,35 @@ def is_third_party_personal_data_provision_question(
         "불법",
     )
 
+    has_privacy = any(
+        term in normalized
+        for term in privacy_terms
+    )
+    has_third_party = any(
+        term in normalized
+        for term in third_party_terms
+    )
+    has_consent_expression = any(
+        term in normalized
+        for term in consent_terms
+    )
+    has_direct_permission_expression = any(
+        term in normalized
+        for term in direct_permission_terms
+    )
+    has_question_expression = any(
+        term in normalized
+        for term in question_terms
+    )
+
     return (
-        any(term in normalized for term in privacy_terms)
-        and any(term in normalized for term in third_party_terms)
-        and any(term in normalized for term in consent_terms)
-        and any(term in normalized for term in permission_terms)
+        has_privacy
+        and has_third_party
+        and (
+            has_consent_expression
+            or has_direct_permission_expression
+        )
+        and has_question_expression
     )
 
 
@@ -1945,15 +2049,19 @@ def is_out_of_stock_refund_question(question: str) -> bool:
     )
 
 
-def build_out_of_stock_refund_answer() -> str:
-    """품절로 공급할 수 없는 경우의 통지·환급 의무를 안내한다."""
-    return (
-        "상품이 품절되어 공급할 수 없는 경우 판매자는 그 사유를 "
-        "지체 없이 소비자에게 알려야 합니다.\n\n"
-        "소비자가 대금을 미리 지급했다면 판매자는 소비자가 대금을 "
-        "지급한 날부터 3영업일 이내에 환급하거나 환급에 필요한 "
-        "조치를 해야 합니다."
+def build_sold_out_refund_answer() -> str:
+    """품절·재고 부족 환급 규칙 답변을 반환한다."""
+    return build_registered_rule_answer(
+        "sold_out_refund"
     )
+
+
+def build_out_of_stock_refund_answer() -> str:
+    """
+    이전 함수명을 사용하는 코드와의 호환성을 유지한다.
+    새 intent 이름은 sold_out_refund이다.
+    """
+    return build_sold_out_refund_answer()
 
 
 def is_change_of_mind_return_deadline_expired_question(
@@ -2028,11 +2136,52 @@ def is_change_of_mind_return_deadline_expired_question(
     )
 
 
-def build_change_of_mind_return_deadline_expired_answer() -> str:
+def extract_elapsed_return_days(
+    question: str,
+) -> int | None:
+    """질문에서 상품 수령 후 경과 일수를 추출한다."""
+    normalized = normalize_text(question)
+
+    numeric_match = re.search(
+        r"(\d+)일",
+        normalized,
+    )
+
+    if numeric_match:
+        return int(numeric_match.group(1))
+
+    korean_day_values = {
+        "팔일": 8,
+        "구일": 9,
+        "열흘": 10,
+        "십일": 10,
+    }
+
+    for term, value in korean_day_values.items():
+        if term in normalized:
+            return value
+
+    return None
+
+
+def build_change_of_mind_return_deadline_expired_answer(
+    question: str,
+) -> str:
     """단순 변심 반품기간 경과와 예외를 구분해 안내한다."""
+    elapsed_days = extract_elapsed_return_days(
+        question
+    )
+
+    if elapsed_days is None:
+        elapsed_text = "7일이 지난 경우에는"
+    else:
+        elapsed_text = (
+            f"{elapsed_days}일이 지났다면"
+        )
+
     return (
         "단순 변심이라면 원칙적으로 상품을 받은 날부터 7일 "
-        "이내에 반품을 요청해야 하므로, 8일이 지났다면 법정 "
+        f"이내에 반품을 요청해야 하므로, {elapsed_text} 법정 "
         "청약철회 기간을 넘겨 반품이 어려울 수 있습니다.\n\n"
         "다만 쇼핑몰이 7일보다 긴 반품 기간을 정한 경우에는 "
         "그 기간을 따릅니다. 또한 상품이 표시·광고 또는 계약 "
@@ -2311,19 +2460,9 @@ def is_return_obstruction_question(question: str) -> bool:
 
 
 def build_return_obstruction_answer() -> str:
-    """
-    반품 방해 질문은 금지행위를 허용행위로 반대로 설명하지 않도록
-    검증된 문장으로 반환한다.
-    """
-    return (
-        "쇼핑몰은 거짓 또는 과장된 사실을 알리거나 기만적인 "
-        "방법을 사용하여 소비자의 청약철회나 계약 해지를 "
-        "방해해서는 안 됩니다.\n\n"
-        "반품 절차를 고의로 어렵게 만들거나, 정당한 근거 없이 "
-        "추가 비용을 요구하여 소비자가 반품을 포기하도록 만드는 "
-        "행위도 청약철회를 방해하는 행위에 해당할 수 있습니다. "
-        "이런 경우에는 반품 요청 내역과 안내 화면, 상담 기록 등을 "
-        "보관해 두는 것이 좋습니다."
+    """반품·청약철회 방해 규칙 답변을 반환한다."""
+    return build_registered_rule_answer(
+        "return_obstruction"
     )
 
 
@@ -2613,13 +2752,9 @@ def is_wrong_item_return_cost_question(
 
 
 def build_wrong_item_return_cost_answer() -> str:
-    """주문과 다른 상품이 배송된 경우의 반품비 부담을 안내한다."""
-    return (
-        "주문한 상품과 다른 제품이 배송된 경우에는 반품에 필요한 "
-        "배송비를 판매자가 부담해야 합니다.\n\n"
-        "이는 소비자의 단순 변심이 아니라 계약 내용과 다르게 "
-        "상품이 제공된 경우이므로, 판매자가 반품 택배비를 "
-        "소비자에게 요구해서는 안 됩니다."
+    """오배송 반품비 부담 규칙 답변을 반환한다."""
+    return build_registered_rule_answer(
+        "wrong_item_return_cost"
     )
 
 
@@ -2749,18 +2884,9 @@ def is_carrier_blame_return_cost_question(
 
 
 def build_carrier_blame_return_cost_answer() -> str:
-    """
-    판매자가 택배회사 책임을 이유로 반품비 부담을 거절할 수
-    없다는 점을 직접 안내한다.
-    """
-    return (
-        "아니요. 배송 중 파손된 상품의 반품 배송비를 "
-        "택배회사 책임이라는 이유로 소비자에게 부담시켜서는 "
-        "안 됩니다.\n\n"
-        "소비자에 대한 반품 처리는 판매자가 진행하고, 상품을 "
-        "반환하는 데 필요한 비용도 판매자가 부담해야 합니다. "
-        "판매자와 택배회사 사이의 책임이나 비용 정산은 소비자에 "
-        "대한 반품 처리와 별도로 해결할 문제입니다."
+    """배송 중 파손 책임 전가 규칙 답변을 반환한다."""
+    return build_registered_rule_answer(
+        "carrier_blame_return_cost"
     )
 
 
@@ -2868,6 +2994,7 @@ def is_return_cost_question(question: str) -> bool:
 
     return_terms = (
         "반품",
+        "반송",
         "청약철회",
         "돌려보",
         "돌려주",
@@ -2876,11 +3003,15 @@ def is_return_cost_question(question: str) -> bool:
 
     cost_terms = (
         "반품비",
+        "반품비용",
         "반품배송비",
         "배송비",
         "택배비",
         "반환비용",
         "반송비",
+        "반송비용",
+        "돌려보내는비용",
+        "반환하는비용",
         "누가부담",
         "누가내",
         "누가내야",
@@ -2896,14 +3027,11 @@ def is_return_cost_question(question: str) -> bool:
 def build_return_cost_answer(
     documents: list[dict[str, Any]] | None = None,
 ) -> str:
-    """반품 배송비 부담 원칙을 검증된 문장으로 반환한다."""
-    return (
-        "마음에 들지 않는다는 이유의 단순 변심 반품이라면, "
-        "상품을 반환하는 데 필요한 택배비는 소비자가 부담합니다.\n\n"
-        "다만 상품이 표시·광고 내용과 다르거나 계약 내용과 다르게 "
-        "이행된 경우에는 판매자가 반환 비용을 부담합니다. "
-        "판매자는 단순 변심 반품에 대해 반환 비용 외의 별도 "
-        "위약금이나 손해배상을 청구할 수 없습니다."
+    """일반 반품비 부담 규칙 답변을 반환한다."""
+    del documents
+
+    return build_registered_rule_answer(
+        "return_cost"
     )
 
 
@@ -2978,8 +3106,8 @@ def answer_question(
         structured_intent == "mismatch_return_deadline"
         or is_mismatch_deadline_question(question)
     )
-    matches_out_of_stock_refund = (
-        structured_intent == "out_of_stock_refund"
+    matches_sold_out_refund = (
+        structured_intent == "sold_out_refund"
         or is_out_of_stock_refund_question(question)
     )
     matches_return_obstruction = (
@@ -3001,6 +3129,10 @@ def answer_question(
     matches_change_of_mind_return = (
         structured_intent == "change_of_mind_return"
         or is_change_of_mind_return_question(question)
+    )
+    matches_return_cost = (
+        structured_intent == "return_cost"
+        or is_return_cost_question(question)
     )
 
     # query_builder가 전용 템플릿을 제공한 intent는 구조화된
@@ -3076,15 +3208,15 @@ def answer_question(
                 "결제하기 전에 주문한 상품, 수량, 가격을 확인하고 "
                 "수정하거나 주문을 취소할 수 있어야 하나요?"
             )
-        elif is_pre_purchase_shipping_information_question(question):
-            search_question = (
-                "쇼핑몰은 결제 전에 배송 방법, 배송비 부담자, "
-                "예상 배송기간을 알려야 하나요?"
-            )
         elif is_pre_payment_total_amount_question(question):
             search_question = (
                 "결제하기 전에 상품 가격과 배송비를 포함한 "
                 "총 결제금액을 표시해야 하나요?"
+            )
+        elif is_pre_purchase_shipping_information_question(question):
+            search_question = (
+                "쇼핑몰은 결제 전에 배송 방법, 배송비 부담자, "
+                "예상 배송기간을 알려야 하나요?"
             )
         elif is_delivery_courier_privacy_outsourcing_question(question):
             search_question = (
@@ -3121,16 +3253,29 @@ def answer_question(
                 "반품 상품을 판매자가 돌려받은 경우 "
                 "언제까지 환급해야 하나요?"
             )
-        elif matches_out_of_stock_refund:
+        elif matches_sold_out_refund:
             search_question = "품절이면 판매자는 언제 환불해야 하나요?"
         elif is_change_of_mind_return_deadline_expired_question(
             question
         ):
-            search_question = (
-                "상품을 받은 지 8일이 지난 뒤 단순 변심으로 "
-                "반품할 수 있나요?"
+            elapsed_days = (
+                extract_elapsed_return_days(question)
             )
-        elif is_discounted_product_return_question(question):
+
+            if elapsed_days is None:
+                search_question = (
+                    "상품을 받은 지 7일이 지난 뒤 단순 변심으로 "
+                    "반품할 수 있나요?"
+                )
+            else:
+                search_question = (
+                    f"상품을 받은 지 {elapsed_days}일이 지난 뒤 "
+                    "단순 변심으로 반품할 수 있나요?"
+                )
+        elif (
+            is_discounted_product_return_question(question)
+            and not matches_return_obstruction
+        ):
             search_question = (
                 "세일이나 할인 상품이라는 이유만으로 쇼핑몰이 "
                 "단순 변심 반품을 거절할 수 있나요?"
@@ -3173,7 +3318,7 @@ def answer_question(
                 "불량 상품이나 계약 내용과 다른 상품을 반품할 때 "
                 "반환 배송비는 판매자가 부담하나요?"
             )
-        elif is_return_cost_question(question):
+        elif matches_return_cost:
             search_question = "반품 배송비는 누가 부담하나요?"
         elif matches_change_of_mind_return:
             search_question = "단순 변심으로도 반품할 수 있나요?"
@@ -3193,7 +3338,9 @@ def answer_question(
         initial_documents,
     )
 
-    searched_documents = filter_result.kept_documents
+    searched_documents = sanitize_source_documents(
+        filter_result.kept_documents
+    )
 
     # 제품 종류가 없는 질문에서 검색 결과가 특정 품목별 표로만
     # 구성된 경우, 전자상거래법·표준약관 중심으로 한 번 재검색한다.
@@ -3220,7 +3367,7 @@ def answer_question(
             )
         )
 
-        searched_documents = (
+        searched_documents = sanitize_source_documents(
             general_filter_result.kept_documents
         )
 
@@ -3256,6 +3403,7 @@ def answer_question(
                 question=question,
                 intent="replacement_defective_refund",
                 documents=evidence_documents,
+                validation_documents=source_documents,
             )
         except Exception:
             # Ollama 호출이나 답변 생성에 문제가 생겨도
@@ -3290,8 +3438,8 @@ def answer_question(
             "sources": source_documents,
         }
 
-    # 상품 불일치 변형 질문은 점수 필터 결과가 비어 있어도
-    # 이미 검증된 기한 답변을 반환한다.
+    # 상품 설명·광고 또는 계약 내용과 실제 상품이 다른 경우에는
+    # 관련 기한 문장만 선별하고 3개월·30일 조건을 필수 검증한다.
     if matches_mismatch_deadline:
         source_documents = (
             relevant_documents
@@ -3299,9 +3447,31 @@ def answer_question(
             else searched_documents[:MAX_CONTEXT_DOCUMENTS]
         )
 
+        evidence_result = select_evidence_documents(
+            question=question,
+            intent="mismatch_return_deadline",
+            documents=source_documents,
+        )
+
+        evidence_documents = (
+            evidence_result.selected_documents
+        )
+
+        try:
+            hybrid_answer = build_hybrid_answer(
+                question=question,
+                intent="mismatch_return_deadline",
+                documents=evidence_documents,
+                validation_documents=source_documents,
+            )
+        except Exception:
+            hybrid_answer = build_mismatch_deadline_answer()
+
+        hybrid_answer = clean_answer(hybrid_answer)
+
         return {
             "question": question,
-            "answer": build_mismatch_deadline_answer(),
+            "answer": hybrid_answer,
             "intent": "mismatch_return_deadline",
             "sources": source_documents,
         }
@@ -3434,6 +3604,22 @@ def answer_question(
             "sources": source_documents,
         }
 
+    # 결제 전 총 결제금액 질문은 배송비라는 단어가 포함되어도
+    # 구매 전 배송정보 질문보다 우선 처리한다.
+    if is_pre_payment_total_amount_question(question):
+        source_documents = (
+            relevant_documents
+            if relevant_documents
+            else searched_documents[:MAX_CONTEXT_DOCUMENTS]
+        )
+
+        return {
+            "question": question,
+            "answer": build_pre_payment_total_amount_answer(),
+            "intent": "pre_payment_total_amount",
+            "sources": source_documents,
+        }
+
     # 구매 전 배송정보 질문은 배송 지연 시 배상 예외가 빠지지
     # 않도록 검증된 답변을 반환한다.
     if is_pre_purchase_shipping_information_question(question):
@@ -3447,22 +3633,6 @@ def answer_question(
             "question": question,
             "answer": build_pre_purchase_shipping_information_answer(),
             "intent": "pre_purchase_shipping_information",
-            "sources": source_documents,
-        }
-
-    # 결제 전 총 결제금액 질문은 결제 후 통지나 표시 방법 요청과
-    # 혼동하지 않도록 검증된 답변을 반환한다.
-    if is_pre_payment_total_amount_question(question):
-        source_documents = (
-            relevant_documents
-            if relevant_documents
-            else searched_documents[:MAX_CONTEXT_DOCUMENTS]
-        )
-
-        return {
-            "question": question,
-            "answer": build_pre_payment_total_amount_answer(),
-            "intent": "pre_payment_total_amount",
             "sources": source_documents,
         }
 
@@ -3578,19 +3748,41 @@ def answer_question(
             "sources": source_documents,
         }
 
-    # 품절 환급 질문은 주체와 3영업일 기준을 혼동하지 않도록
-    # 검증된 답변을 반환한다.
-    if matches_out_of_stock_refund:
+    # 품절·재고 부족 환급 질문은 관련 근거 문장만 선별하고,
+    # 지체 없는 통지와 선결제 대금 3영업일 환급을 필수 검증한다.
+    if matches_sold_out_refund:
         source_documents = (
             relevant_documents
             if relevant_documents
             else searched_documents[:MAX_CONTEXT_DOCUMENTS]
         )
 
+        evidence_result = select_evidence_documents(
+            question=question,
+            intent="sold_out_refund",
+            documents=source_documents,
+        )
+
+        evidence_documents = (
+            evidence_result.selected_documents
+        )
+
+        try:
+            hybrid_answer = build_hybrid_answer(
+                question=question,
+                intent="sold_out_refund",
+                documents=evidence_documents,
+                validation_documents=source_documents,
+            )
+        except Exception:
+            hybrid_answer = build_sold_out_refund_answer()
+
+        hybrid_answer = clean_answer(hybrid_answer)
+
         return {
             "question": question,
-            "answer": build_out_of_stock_refund_answer(),
-            "intent": "out_of_stock_refund",
+            "answer": hybrid_answer,
+            "intent": "sold_out_refund",
             "sources": source_documents,
         }
 
@@ -3608,15 +3800,21 @@ def answer_question(
         return {
             "question": question,
             "answer": (
-                build_change_of_mind_return_deadline_expired_answer()
+                build_change_of_mind_return_deadline_expired_answer(
+                    question
+                )
             ),
             "intent": "change_of_mind_return_deadline_expired",
             "sources": source_documents,
         }
 
-    # 세일·할인 상품 질문은 반품 방해나 일반 단순 변심 질문보다
-    # 먼저 처리하여 할인 여부가 제한 사유가 아님을 안내한다.
-    if is_discounted_product_return_question(question):
+    # 일반적인 세일·할인 상품 질문은 전용 답변으로 처리한다.
+    # 단, 판매자의 일률적 반품 거절로 분류된 질문은
+    # return_obstruction 흐름이 우선한다.
+    if (
+        is_discounted_product_return_question(question)
+        and not matches_return_obstruction
+    ):
         source_documents = (
             relevant_documents
             if relevant_documents
@@ -3662,8 +3860,8 @@ def answer_question(
             "sources": source_documents,
         }
 
-    # 반품 방해 변형 질문은 점수 필터 결과가 비어 있어도
-    # 이미 검증된 금지행위 답변을 반환한다.
+    # 반품·청약철회 방해 질문은 관련 금지행위 문장만 선별하고,
+    # 일률적 반품 제한과 추가 비용 요구 금지를 필수 검증한다.
     if matches_return_obstruction:
         source_documents = (
             relevant_documents
@@ -3671,9 +3869,31 @@ def answer_question(
             else searched_documents[:MAX_CONTEXT_DOCUMENTS]
         )
 
+        evidence_result = select_evidence_documents(
+            question=question,
+            intent="return_obstruction",
+            documents=source_documents,
+        )
+
+        evidence_documents = (
+            evidence_result.selected_documents
+        )
+
+        try:
+            hybrid_answer = build_hybrid_answer(
+                question=question,
+                intent="return_obstruction",
+                documents=evidence_documents,
+                validation_documents=source_documents,
+            )
+        except Exception:
+            hybrid_answer = build_return_obstruction_answer()
+
+        hybrid_answer = clean_answer(hybrid_answer)
+
         return {
             "question": question,
-            "answer": build_return_obstruction_answer(),
+            "answer": hybrid_answer,
             "intent": "return_obstruction",
             "sources": source_documents,
         }
@@ -3710,8 +3930,8 @@ def answer_question(
             "sources": source_documents,
         }
 
-    # 주문한 것과 다른 상품이 배송된 경우에는 오배송 전용 답변을
-    # 가장 먼저 반환하여 단순 변심 답변이 앞에 나오지 않도록 한다.
+    # 주문한 것과 다른 상품이 배송된 경우에는 관련 비용 문장만
+    # 선별하고 판매자 부담이라는 핵심 사실을 필수 검증한다.
     if matches_wrong_item_return_cost:
         source_documents = (
             relevant_documents
@@ -3719,15 +3939,37 @@ def answer_question(
             else searched_documents[:MAX_CONTEXT_DOCUMENTS]
         )
 
+        evidence_result = select_evidence_documents(
+            question=question,
+            intent="wrong_item_return_cost",
+            documents=source_documents,
+        )
+
+        evidence_documents = (
+            evidence_result.selected_documents
+        )
+
+        try:
+            hybrid_answer = build_hybrid_answer(
+                question=question,
+                intent="wrong_item_return_cost",
+                documents=evidence_documents,
+                validation_documents=source_documents,
+            )
+        except Exception:
+            hybrid_answer = build_wrong_item_return_cost_answer()
+
+        hybrid_answer = clean_answer(hybrid_answer)
+
         return {
             "question": question,
-            "answer": build_wrong_item_return_cost_answer(),
+            "answer": hybrid_answer,
             "intent": "wrong_item_return_cost",
             "sources": source_documents,
         }
 
-    # 배송 중 파손을 택배회사 책임으로 돌리며 판매자가 반품비
-    # 부담을 거절하는 질문은 책임 전가 전용 답변을 우선 반환한다.
+    # 배송 중 파손을 택배회사 책임으로 돌리는 질문은 관련
+    # 비용 부담 문장만 선별하고 판매자의 처리 의무를 검증한다.
     if matches_carrier_blame_return_cost:
         source_documents = (
             relevant_documents
@@ -3735,9 +3977,33 @@ def answer_question(
             else searched_documents[:MAX_CONTEXT_DOCUMENTS]
         )
 
+        evidence_result = select_evidence_documents(
+            question=question,
+            intent="carrier_blame_return_cost",
+            documents=source_documents,
+        )
+
+        evidence_documents = (
+            evidence_result.selected_documents
+        )
+
+        try:
+            hybrid_answer = build_hybrid_answer(
+                question=question,
+                intent="carrier_blame_return_cost",
+                documents=evidence_documents,
+                validation_documents=source_documents,
+            )
+        except Exception:
+            hybrid_answer = (
+                build_carrier_blame_return_cost_answer()
+            )
+
+        hybrid_answer = clean_answer(hybrid_answer)
+
         return {
             "question": question,
-            "answer": build_carrier_blame_return_cost_answer(),
+            "answer": hybrid_answer,
             "intent": "carrier_blame_return_cost",
             "sources": source_documents,
         }
@@ -3758,18 +4024,40 @@ def answer_question(
             "sources": source_documents,
         }
 
-    # 반품비 변형 질문은 해외구매대행 사례 등이 섞이지 않도록
-    # 점수 필터 결과와 관계없이 검증된 답변을 반환한다.
-    if is_return_cost_question(question):
+    # 일반적인 반품비 질문은 단순 변심과 판매자 책임 사유를
+    # 구분하는 문장만 선별하고 두 비용 부담 원칙을 필수 검증한다.
+    if matches_return_cost:
         source_documents = (
             relevant_documents
             if relevant_documents
             else searched_documents[:MAX_CONTEXT_DOCUMENTS]
         )
 
+        evidence_result = select_evidence_documents(
+            question=question,
+            intent="return_cost",
+            documents=source_documents,
+        )
+
+        evidence_documents = (
+            evidence_result.selected_documents
+        )
+
+        try:
+            hybrid_answer = build_hybrid_answer(
+                question=question,
+                intent="return_cost",
+                documents=evidence_documents,
+                validation_documents=source_documents,
+            )
+        except Exception:
+            hybrid_answer = build_return_cost_answer()
+
+        hybrid_answer = clean_answer(hybrid_answer)
+
         return {
             "question": question,
-            "answer": build_return_cost_answer(),
+            "answer": hybrid_answer,
             "intent": "return_cost",
             "sources": source_documents,
         }

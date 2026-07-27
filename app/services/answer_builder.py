@@ -6,30 +6,14 @@ from typing import Any, Callable, Final
 from app.services.answer_validator import (
     validate_and_repair_answer,
 )
+from app.services.legal_rules import (
+    get_legal_rule,
+)
 from app.services.ollama_service import generate_answer
 
 
 MAX_DOCUMENT_LENGTH: Final[int] = 4000
 MAX_CONTEXT_DOCUMENTS: Final[int] = 3
-
-
-HYBRID_CORE_CONCLUSIONS: Final[dict[str, str]] = {
-    "replacement_defective_refund": (
-        "교환 또는 교체받은 제품에도 다시 고장이나 작동 문제가 "
-        "발생했다면 판매자에게 환불을 요구할 수 있습니다."
-    ),
-}
-
-
-HYBRID_INTENT_GUIDANCE: Final[dict[str, str]] = {
-    "replacement_defective_refund": (
-        "환불이 무조건 확정된다고 표현하지 마세요. "
-        "검색 문서에서 직접 확인되는 청약철회 조건, 기간, "
-        "환급 절차만 보완하세요. 제품 종류가 질문에 명시되지 "
-        "않았다면 특정 품목의 수리 횟수, 감가상각, 보증기간을 "
-        "임의로 적용하지 마세요."
-    ),
-}
 
 
 HYBRID_ANSWER_SYSTEM_PROMPT: Final[str] = """
@@ -68,12 +52,11 @@ class HybridAnswerPlan:
         return asdict(self)
 
 
-def can_build_hybrid_answer(intent: str | None) -> bool:
-    """현재 하이브리드 답변을 지원하는 intent인지 확인한다."""
-    return bool(
-        intent
-        and intent in HYBRID_CORE_CONCLUSIONS
-    )
+def can_build_hybrid_answer(
+    intent: str | None,
+) -> bool:
+    """legal_rules.py에 등록된 intent인지 확인한다."""
+    return get_legal_rule(intent) is not None
 
 
 def _get_document_content(
@@ -82,8 +65,11 @@ def _get_document_content(
     """Qdrant 결과에서 사용할 본문 필드를 안전하게 가져온다."""
     for key in (
         "parent_content",
+        "child_content",
         "content",
         "text",
+        "excerpt",
+        "snippet",
     ):
         value = str(document.get(key, "")).strip()
 
@@ -91,6 +77,11 @@ def _get_document_content(
             return value[:MAX_DOCUMENT_LENGTH]
 
     return ""
+
+
+def _clean_source_label(value: object) -> str:
+    """출처 제목에 남은 Markdown 표 기호를 제거한다."""
+    return str(value).strip().strip("|").strip()
 
 
 def build_source_context(
@@ -105,13 +96,13 @@ def build_source_context(
         if not content:
             continue
 
-        heading = str(
+        heading = _clean_source_label(
             document.get("heading", "")
-        ).strip()
+        )
 
-        source_file = str(
+        source_file = _clean_source_label(
             document.get("source_file", "")
-        ).strip()
+        )
 
         context_parts.append(
             "\n".join(
@@ -133,21 +124,19 @@ def build_hybrid_answer_prompt(
     intent: str,
     documents: list[dict[str, Any]],
 ) -> str:
-    """
-    고정 핵심 결론과 검색된 조건을 결합하기 위한 프롬프트를 만든다.
-    """
+    """legal_rules.py의 규칙과 검색 근거로 프롬프트를 만든다."""
     cleaned_question = " ".join(str(question).split())
 
     if not cleaned_question:
         raise ValueError("질문을 입력해주세요.")
 
-    if not can_build_hybrid_answer(intent):
+    rule = get_legal_rule(intent)
+
+    if rule is None:
         raise ValueError(
             f"지원하지 않는 하이브리드 intent입니다: {intent}"
         )
 
-    core_conclusion = HYBRID_CORE_CONCLUSIONS[intent]
-    intent_guidance = HYBRID_INTENT_GUIDANCE[intent]
     context = build_source_context(documents)
 
     return f"""
@@ -157,10 +146,10 @@ def build_hybrid_answer_prompt(
 {cleaned_question}
 
 [반드시 유지할 핵심 결론]
-{core_conclusion}
+{rule.core_conclusion}
 
 [이 질문의 추가 작성 규칙]
-{intent_guidance}
+{rule.guidance}
 
 [검색된 근거 문서]
 {context if context else "사용할 수 있는 근거 문서가 없습니다."}
@@ -183,9 +172,9 @@ def create_hybrid_answer_plan(
     documents: list[dict[str, Any]],
 ) -> HybridAnswerPlan:
     """생성 전 확인이나 테스트에 사용할 답변 계획을 반환한다."""
-    supported = can_build_hybrid_answer(intent)
+    rule = get_legal_rule(intent)
 
-    if not supported:
+    if rule is None:
         return HybridAnswerPlan(
             question=" ".join(str(question).split()),
             intent=intent,
@@ -204,7 +193,7 @@ def create_hybrid_answer_plan(
     return HybridAnswerPlan(
         question=" ".join(str(question).split()),
         intent=intent,
-        core_conclusion=HYBRID_CORE_CONCLUSIONS[intent],
+        core_conclusion=rule.core_conclusion,
         document_count=len(usable_documents),
         prompt=build_hybrid_answer_prompt(
             question=question,
@@ -242,9 +231,10 @@ def build_hybrid_answer(
     intent: str,
     documents: list[dict[str, Any]],
     generator: Callable[..., str] | None = None,
+    validation_documents: list[dict[str, Any]] | None = None,
 ) -> str:
     """
-    검증된 핵심 결론과 검색 문서의 조건을 결합해 최종 답변을 만든다.
+    legal_rules.py의 핵심 결론과 검색 문서를 결합해 답변을 만든다.
 
     generator를 전달하지 않으면 기존 Ollama generate_answer를 사용한다.
     """
@@ -259,8 +249,21 @@ def build_hybrid_answer(
             f"지원하지 않는 하이브리드 intent입니다: {intent}"
         )
 
+    resolved_validation_documents = (
+        validation_documents
+        if validation_documents is not None
+        else documents
+    )
+
     if plan.document_count == 0:
-        return plan.core_conclusion
+        validation_result = validate_and_repair_answer(
+            intent=intent,
+            answer=plan.core_conclusion,
+            documents=resolved_validation_documents,
+            core_conclusion=plan.core_conclusion,
+        )
+
+        return validation_result.answer
 
     resolved_generator = (
         generator
@@ -278,7 +281,7 @@ def build_hybrid_answer(
     validation_result = validate_and_repair_answer(
         intent=intent,
         answer=cleaned_answer,
-        documents=documents,
+        documents=resolved_validation_documents,
         core_conclusion=plan.core_conclusion,
     )
 

@@ -1,11 +1,14 @@
 kiwipiepy
 pymupdf
-pillow 
+pillow
 numpy
 paddlepaddle
 paddleocr
-markdown-it-py requests
--U sentence-transformers
--U qdrant-client
+markdown-it-py
+requests
+sentence-transformers
+qdrant-client
 fastapi
 uvicorn
+ollama
+python-dotenv
