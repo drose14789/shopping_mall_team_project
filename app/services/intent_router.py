@@ -102,9 +102,17 @@ ISSUE_TERMS: Final[dict[str, tuple[str, ...]]] = {
     ),
     "out_of_stock": (
         "품절",
+        "품절됐",
+        "품절되",
         "재고없",
         "재고가없",
+        "재고부족",
+        "재고가부족",
+        "재고소진",
+        "재고가소진",
         "공급할수없",
+        "배송할수없",
+        "발송할수없",
     ),
     "return_obstruction": (
         "반품방해",
@@ -112,6 +120,18 @@ ISSUE_TERMS: Final[dict[str, tuple[str, ...]]] = {
         "반품절차를어렵",
         "반품을못하게",
         "청약철회방해",
+        "세일상품반품불가",
+        "할인상품반품불가",
+        "특가상품반품불가",
+        "세일상품은반품안",
+        "할인상품은반품안",
+        "특가상품은반품안",
+        "세일이라며반품",
+        "할인이라며반품",
+        "특가라며반품",
+        "세일상품이라며",
+        "할인상품이라며",
+        "특가상품이라며",
     ),
     "seller_information": (
         "판매자정보",
@@ -143,7 +163,11 @@ REQUEST_TERMS: Final[dict[str, tuple[str, ...]]] = {
     "refund": (
         "환불",
         "환급",
+        "환불받",
+        "환급받",
         "돈을돌려",
+        "돈돌려",
+        "돌려받",
         "대금반환",
         "결제취소",
         "청약철회",
@@ -172,6 +196,11 @@ REQUEST_TERMS: Final[dict[str, tuple[str, ...]]] = {
     ),
     "deadline": (
         "언제까지",
+        "언제환불",
+        "언제환급",
+        "언제돌려",
+        "환불시점",
+        "환급시점",
         "기한",
         "기간",
         "며칠",
@@ -406,8 +435,11 @@ def build_legacy_intent(
     if issue == "change_of_mind" and request == "return":
         return "change_of_mind_return"
 
-    if issue == "out_of_stock" and request == "refund":
-        return "out_of_stock_refund"
+    if (
+        issue == "out_of_stock"
+        and request in {"refund", "deadline"}
+    ):
+        return "sold_out_refund"
 
     if issue == "return_obstruction":
         return "return_obstruction"
@@ -459,6 +491,44 @@ def analyze_question(question: str) -> QuestionAnalysis:
         normalized,
         ISSUE_TERMS,
     )
+
+    # '반품절차'에는 문자열상 '품절'이 포함된다.
+    # 반품 방해 표현이 확인되면 품절보다 우선해 분류한다.
+    if contains_any(
+        normalized,
+        ISSUE_TERMS["return_obstruction"],
+    ):
+        issue = "return_obstruction"
+
+    sale_terms = (
+        "세일",
+        "할인",
+        "특가",
+        "프로모션",
+    )
+
+    return_refusal_terms = (
+        "반품불가",
+        "반품이불가",
+        "반품안",
+        "반품이안",
+        "반품할수없",
+        "반품을거절",
+        "반품거절",
+        "반품을못",
+        "무조건반품",
+    )
+
+    # 세일·할인·특가 상품이라는 이유와 반품 거절 표현이
+    # 함께 나타나면 청약철회 방해 질문으로 우선 처리한다.
+    if (
+        contains_any(normalized, sale_terms)
+        and contains_any(
+            normalized,
+            return_refusal_terms,
+        )
+    ):
+        issue = "return_obstruction"
 
     request = find_request(normalized)
 
