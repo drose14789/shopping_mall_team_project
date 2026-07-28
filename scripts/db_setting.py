@@ -1,10 +1,21 @@
+import os
+
 from sqlalchemy import create_engine
-# DB 설정
-id='root'
-pw='1234'
-host='localhost:3306'
-db='ecommerce'
-url= f'mysql+pymysql://{id}:{pw}@{host}/{db}'
+
 
 def get_engine():
-    return create_engine(url)
+    db_user = os.getenv("DB_USER", "root")
+    db_password = os.getenv("DB_PASSWORD", "1234")
+    db_host = os.getenv("DB_HOST", "localhost")
+    db_port = os.getenv("DB_PORT", "3306")
+    db_name = os.getenv("DB_NAME", "ecommerce")
+
+    database_url = (
+        f"mysql+pymysql://{db_user}:{db_password}"
+        f"@{db_host}:{db_port}/{db_name}"
+    )
+
+    return create_engine(
+        database_url,
+        pool_pre_ping=True,
+    )
