@@ -24,3 +24,10 @@ frontend/dist/
 # 운영체제
 .DS_Store
 Thumbs.db
+
+# 데이터
+data/analyze_data/origin_data/*
+!data/analyze_data/origin_data/.gitkeep
+data/analyze_data/input/total_data_cleaned.csv
+data/visualizations/*
+!data/visualizations/.gitkeep
