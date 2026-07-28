@@ -4,16 +4,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.chat import router as chat_router
+from app.routers.score import router as score_router
 
 
 app = FastAPI(
-    title="온라인 쇼핑몰 법률 RAG 챗봇",
-    description="Qdrant 검색과 Ollama를 이용한 법률·정책 안내 API",
+    title="온라인 쇼핑몰 데이터분석 및 법률 RAG API",
+    description="상품 데이터분석과 Qdrant·Ollama 기반 법률 챗봇 API",
     version="1.0.0",
 )
 
 
-# 나중에 React에서 FastAPI를 호출할 수 있도록 허용
+# React에서 FastAPI를 호출할 수 있도록 허용
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -26,8 +27,11 @@ app.add_middleware(
 )
 
 
-# chat.py에 만든 /chat API 연결
+# 법률 챗봇 API 연결
 app.include_router(chat_router)
+
+# 데이터분석 API 연결
+app.include_router(score_router)
 
 
 @app.get(
@@ -37,7 +41,7 @@ app.include_router(chat_router)
 )
 def root() -> dict[str, str]:
     return {
-        "message": "쇼핑몰 법률 RAG 챗봇 API가 실행 중입니다."
+        "message": "쇼핑몰 데이터분석 및 법률 RAG API가 실행 중입니다."
     }
 
 
