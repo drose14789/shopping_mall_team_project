@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Callable
 
 from app.services.answer_builder import build_hybrid_answer
 from app.services.document_filter import (
@@ -21,9 +21,46 @@ SEARCH_TOP_K = 5
 MAX_CONTEXT_DOCUMENTS = 3
 MIN_RERANK_SCORE = 0.1
 RELATIVE_SCORE_RATIO = 0.25
-MAX_DOCUMENT_LENGTH = 4000
+
+# 단순 질문은 작은 문맥을 사용하고, 조건·예외·필수 항목을
+# 묻는 질문은 충분한 문맥을 사용합니다.
+FAST_CONTEXT_DOCUMENTS = 2
+FAST_DOCUMENT_LENGTH = 1600
+FAST_TOTAL_CONTEXT_LENGTH = 3000
+FAST_NUM_PREDICT = 220
+
+DETAIL_CONTEXT_DOCUMENTS = 3
+DETAIL_DOCUMENT_LENGTH = 2400
+DETAIL_TOTAL_CONTEXT_LENGTH = 6000
+DETAIL_NUM_PREDICT = 320
+
+MAX_DOCUMENT_LENGTH = DETAIL_DOCUMENT_LENGTH
+MAX_TOTAL_CONTEXT_LENGTH = DETAIL_TOTAL_CONTEXT_LENGTH
+MAX_SOURCE_CHILD_LENGTH = 800
+MAX_SOURCE_PARENT_LENGTH = 1400
 STRUCTURED_INTENT_MIN_CONFIDENCE = 0.8
 GENERAL_SEARCH_TOP_K = 8
+
+TokenCallback = Callable[[str], None]
+
+
+def _build_streaming_generator(
+    on_token: TokenCallback | None,
+) -> Callable[..., str] | None:
+    """
+    answer_builder가 사용하는 generate_answer 호출에
+    Ollama 스트리밍 콜백을 연결한다.
+    """
+    if on_token is None:
+        return None
+
+    def streaming_generator(**kwargs: Any) -> str:
+        return generate_answer(
+            **kwargs,
+            on_token=on_token,
+        )
+
+    return streaming_generator
 
 
 GENERAL_LEGAL_QUERY_TEMPLATES = {
@@ -170,6 +207,20 @@ def sanitize_source_documents(
 
             sanitized_document[key] = value
 
+        child_content = str(
+            sanitized_document.get("child_content", "")
+        ).strip()
+        parent_content = str(
+            sanitized_document.get("parent_content", "")
+        ).strip()
+
+        sanitized_document["child_content"] = (
+            child_content[:MAX_SOURCE_CHILD_LENGTH]
+        )
+        sanitized_document["parent_content"] = (
+            parent_content[:MAX_SOURCE_PARENT_LENGTH]
+        )
+
         sanitized_documents.append(
             sanitized_document
         )
@@ -243,13 +294,101 @@ def select_relevant_documents(
     return relevant_documents[:MAX_CONTEXT_DOCUMENTS]
 
 
+def _requires_detailed_context(
+    question: str,
+) -> bool:
+    """
+    조건, 예외, 필수 항목처럼 여러 근거를 함께 확인해야 하는
+    질문인지 판단합니다.
+    """
+    normalized_question = " ".join(question.split())
+
+    detail_terms = (
+        "조건",
+        "예외",
+        "필수",
+        "항목",
+        "정보",
+        "기준",
+        "주의",
+        "제한",
+        "문제",
+        "의무",
+        "동의",
+        "개인정보",
+        "광고",
+        "상세페이지",
+        "플랫폼",
+        "활용",
+        "어떻게",
+        "무엇",
+        "뭐",
+        "알려",
+        "설명",
+    )
+
+    multi_part_terms = (
+        "그리고",
+        "또는",
+        "및",
+        "동시에",
+        "각각",
+        "차이",
+        "구분",
+    )
+
+    return (
+        len(normalized_question) >= 45
+        or any(
+            term in normalized_question
+            for term in detail_terms
+        )
+        or any(
+            term in normalized_question
+            for term in multi_part_terms
+        )
+    )
+
+
+def _resolve_context_limits(
+    question: str,
+) -> tuple[int, int, int, int]:
+    """
+    문서 수, 문서별 최대 길이, 전체 문맥 길이,
+    답변 생성 토큰 수를 반환합니다.
+    """
+    if _requires_detailed_context(question):
+        return (
+            DETAIL_CONTEXT_DOCUMENTS,
+            DETAIL_DOCUMENT_LENGTH,
+            DETAIL_TOTAL_CONTEXT_LENGTH,
+            DETAIL_NUM_PREDICT,
+        )
+
+    return (
+        FAST_CONTEXT_DOCUMENTS,
+        FAST_DOCUMENT_LENGTH,
+        FAST_TOTAL_CONTEXT_LENGTH,
+        FAST_NUM_PREDICT,
+    )
+
+
 def build_context(
+    question: str,
     documents: list[dict[str, Any]],
 ) -> str:
-    """검색 문서를 Ollama에 전달할 문맥으로 변환한다."""
-    context_parts: list[str] = []
+    """질문 난이도에 맞춰 검색 문서를 Ollama 문맥으로 변환한다."""
+    (
+        max_documents,
+        max_document_length,
+        max_total_context_length,
+        _,
+    ) = _resolve_context_limits(question)
 
-    for document in documents:
+    context_parts: list[str] = []
+    used_length = 0
+
+    for document in documents[:max_documents]:
         heading = str(
             document.get("heading", "")
         ).strip()
@@ -258,14 +397,31 @@ def build_context(
             document.get("source_file", "")
         ).strip()
 
+        # 답변에 필요한 조건과 예외가 보존된 부모 청크를 우선 사용한다.
+        # 부모 청크가 없을 때만 검색된 자식 청크를 사용한다.
         content = str(
             document.get("parent_content", "")
         ).strip()
 
         if not content:
+            content = str(
+                document.get("child_content", "")
+            ).strip()
+
+        if not content:
             continue
 
-        content = content[:MAX_DOCUMENT_LENGTH]
+        remaining_length = (
+            max_total_context_length - used_length
+        )
+
+        if remaining_length <= 0:
+            break
+
+        content = content[:min(
+            max_document_length,
+            remaining_length,
+        )]
 
         context_parts.append(
             "\n".join(
@@ -279,6 +435,8 @@ def build_context(
             )
         )
 
+        used_length += len(content)
+
     return "\n\n".join(context_parts)
 
 
@@ -287,7 +445,10 @@ def build_prompt(
     documents: list[dict[str, Any]],
 ) -> str:
     """일반 질문용 Ollama 프롬프트를 생성한다."""
-    context = build_context(documents)
+    context = build_context(
+        question=question,
+        documents=documents,
+    )
 
     return f"""
 아래 근거 문서를 바탕으로 사용자의 질문에 답변하세요.
@@ -3069,12 +3230,17 @@ def clean_answer(answer: str) -> str:
 
 def answer_question(
     question: str,
+    on_token: TokenCallback | None = None,
 ) -> dict[str, Any]:
     """Qdrant 검색부터 답변 반환까지 전체 RAG 과정을 실행한다."""
     question = " ".join(question.split())
 
     if not question:
         raise ValueError("질문을 입력해주세요.")
+
+    streaming_generator = _build_streaming_generator(
+        on_token
+    )
 
     structured_query_plan = None
 
@@ -3404,6 +3570,7 @@ def answer_question(
                 intent="replacement_defective_refund",
                 documents=evidence_documents,
                 validation_documents=source_documents,
+                generator=streaming_generator,
             )
         except Exception:
             # Ollama 호출이나 답변 생성에 문제가 생겨도
@@ -3463,6 +3630,7 @@ def answer_question(
                 intent="mismatch_return_deadline",
                 documents=evidence_documents,
                 validation_documents=source_documents,
+                generator=streaming_generator,
             )
         except Exception:
             hybrid_answer = build_mismatch_deadline_answer()
@@ -3773,6 +3941,7 @@ def answer_question(
                 intent="sold_out_refund",
                 documents=evidence_documents,
                 validation_documents=source_documents,
+                generator=streaming_generator,
             )
         except Exception:
             hybrid_answer = build_sold_out_refund_answer()
@@ -3885,6 +4054,7 @@ def answer_question(
                 intent="return_obstruction",
                 documents=evidence_documents,
                 validation_documents=source_documents,
+                generator=streaming_generator,
             )
         except Exception:
             hybrid_answer = build_return_obstruction_answer()
@@ -3955,6 +4125,7 @@ def answer_question(
                 intent="wrong_item_return_cost",
                 documents=evidence_documents,
                 validation_documents=source_documents,
+                generator=streaming_generator,
             )
         except Exception:
             hybrid_answer = build_wrong_item_return_cost_answer()
@@ -3993,6 +4164,7 @@ def answer_question(
                 intent="carrier_blame_return_cost",
                 documents=evidence_documents,
                 validation_documents=source_documents,
+                generator=streaming_generator,
             )
         except Exception:
             hybrid_answer = (
@@ -4049,6 +4221,7 @@ def answer_question(
                 intent="return_cost",
                 documents=evidence_documents,
                 validation_documents=source_documents,
+                generator=streaming_generator,
             )
         except Exception:
             hybrid_answer = build_return_cost_answer()
@@ -4103,9 +4276,18 @@ def answer_question(
         documents=relevant_documents,
     )
 
+    (
+        _,
+        _,
+        _,
+        num_predict,
+    ) = _resolve_context_limits(question)
+
     answer = generate_answer(
         prompt=prompt,
         system_prompt=SYSTEM_PROMPT,
+        num_predict=num_predict,
+        on_token=on_token,
     )
 
     answer = clean_answer(answer)

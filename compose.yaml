@@ -55,6 +55,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.fastapi
+
     restart: unless-stopped
 
     ports:
@@ -82,6 +83,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.react
+
     restart: unless-stopped
 
     ports:
