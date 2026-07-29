@@ -20,3 +20,4 @@ openpyxl
 matplotlib
 seaborn
 python-multipart
+xlsxwriter

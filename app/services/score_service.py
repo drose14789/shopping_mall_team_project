@@ -6,7 +6,7 @@ import os
 import scripts.db_setting as db
 
 def validate_and_read_excel(user_excel_path):
-  """엑셀 파일을 읽고 필수 컬럼 및 데이터 구조를 검증합니다."""
+  """엑셀 파일을 읽고 필수 컬럼 및 데이터 구조를 검증"""
   try:
     user_df = pd.read_excel(user_excel_path)
   except Exception as e:
@@ -46,7 +46,7 @@ def validate_and_read_excel(user_excel_path):
 
 
 def classify_product_type(click_score, cart_score, conv_score, return_score):
-  """4가지 지표 점수를 (True/False) 튜플 상태키로 변환하여 유형을 매핑합니다."""
+  """4가지 지표 점수를 (True/False) 튜플 상태키로 변환하여 유형을 매핑"""
   key = tuple(
       score >= 60 for score in (click_score, cart_score, conv_score, return_score)
   )
@@ -74,7 +74,8 @@ def classify_product_type(click_score, cart_score, conv_score, return_score):
 
 
 def evaluate_single_excel_file(user_excel_path, engine):
-  """단일 엑셀 파일을 읽어 기존 평가 로직을 수행합니다."""
+  """단일 엑셀 파일을 읽어 기존 평가 로직을 수행"""
+  # 총 점수 계산 가중치 조정
   fixed_weights = {
       'click_rate': 0.15,
       'wish_conv_rate': 0.10,
@@ -91,7 +92,7 @@ def evaluate_single_excel_file(user_excel_path, engine):
     if pd.isna(row.get('카테고리')) or pd.isna(row.get('노출수')):
       continue
 
-    # 1. Pydantic 스키마를 통해 엑셀 행 데이터 유효성 검증 및 타입 강제 변환
+    # 엑셀 행 데이터 유효성 검증 및 타입 강제 변환
     try:
       row_dict = row.to_dict()
       validated_row = ProductExcelRow(**row_dict)
@@ -104,7 +105,6 @@ def evaluate_single_excel_file(user_excel_path, engine):
           ),
       )
 
-    # 2. 이제 원본 row 대신 검증된 객체(validated_row)로부터 값을 안전하게 가져옵니다.
     product_name_val = str(
         row.get('상품명', row.get('상품 이름', f'상품_{idx + 1}'))
     )
@@ -206,11 +206,11 @@ def evaluate_single_excel_file(user_excel_path, engine):
         percentile_scores[col] * fixed_weights[col]
         for col in metric_labels.keys()
     )
-
+    # 페널티 부여 구간
     penalty = 0.0
-    if user_metrics['conv_rate'] < 1.0:
+    if user_metrics['conv_rate'] < 1.0: # 구매전환율
       penalty += 15.0
-    if user_metrics['roas'] <= 100.0:
+    if user_metrics['roas'] <= 100.0:  # ROAS
       penalty += 10.0
     total_score = max(0.0, total_score - penalty)
     total_score = round(total_score, 2)
@@ -221,7 +221,7 @@ def evaluate_single_excel_file(user_excel_path, engine):
         conv_score=percentile_scores.get('conv_rate', 50.0),
         return_score=percentile_scores.get('return_stability', 50.0),
     )
-
+    # 기본 광고추천금액
     base_ad_spend = 10000.0
 
     def score_to_modifier(percentile):

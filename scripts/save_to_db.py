@@ -4,7 +4,7 @@ from sqlalchemy import text
 import scripts.db_setting as db
 
 
-# 1. 테이블 생성 DDL 스크립트
+# 테이블 생성 DDL 스크립트
 CREATE_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS category_correlations (
     category VARCHAR(255) NOT NULL,
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS median_stats (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
-# 2. 한글 -> DB 영문 컬럼 매핑 사전
+# 한글 -> DB 영문 컬럼 매핑 사전
 COLUMN_MAP = {
     '카테고리': 'category',
     '분기': 'quarter',
@@ -121,7 +121,7 @@ COLUMN_MAP = {
 
 
 def init_db_tables(engine):
-  """테이블이 없을 경우 생성합니다."""
+  """테이블이 없을 경우 생성"""
   print(">>> 1. DB 테이블 생성/확인 중...")
   with engine.begin() as conn:
     for statement in CREATE_TABLES_SQL.split(';'):
@@ -131,7 +131,7 @@ def init_db_tables(engine):
 
 
 def import_excel_to_db(folder_path, engine):
-  """엑셀 파일 4개를 읽어 DB에 적재합니다."""
+  """엑셀 파일 4개를 읽어 DB에 적재"""
   init_db_tables(engine)
 
   # [파일명, DB 테이블명] 매핑 정보
@@ -158,7 +158,7 @@ def import_excel_to_db(folder_path, engine):
       # 컬럼명 한글 -> 영문 변환
       df = df.rename(columns=COLUMN_MAP)
 
-      # 데이터 입력 시 기존 데이터 초기화 후 재적재 (Truncate -> Append)
+      # 데이터 입력 시 기존 데이터 초기화 후 재적재
       with engine.begin() as conn:
         try:
           conn.execute(text(f'TRUNCATE TABLE {table_name}'))
