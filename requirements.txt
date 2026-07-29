@@ -12,3 +12,12 @@ fastapi
 uvicorn
 ollama
 python-dotenv
+sqlalchemy
+pymysql
+selenium
+pandas
+openpyxl
+matplotlib
+seaborn
+python-multipart
+xlsxwriter

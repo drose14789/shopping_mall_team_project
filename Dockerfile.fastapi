@@ -12,6 +12,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
 
 COPY search_qdrant.py ./search_qdrant.py
 COPY app ./app
+COPY scripts ./scripts
 COPY data ./data
 
 EXPOSE 8000
