@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS total_stats (
     PRIMARY KEY (category, quarter)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS outlier_stats (
+CREATE TABLE IF NOT EXISTS ideal_value_stats (
     category VARCHAR(255),
     quarter VARCHAR(20),
     order_amount DOUBLE PRECISION,
@@ -138,7 +138,7 @@ def import_excel_to_db(folder_path, engine):
   file_table_mapping = [
       ('통합_분기별_상관관계_병합.xlsx', 'category_correlations'),
       ('통합_분기별_전체평균_병합.xlsx', 'total_stats'),
-      ('통합_분기별_상위결과_병합.xlsx', 'outlier_stats'),
+      ('통합_분기별_상위결과_병합.xlsx', 'ideal_value_stats'),
       ('통합_분기별_중간치_결과_병합.xlsx', 'median_stats'),
   ]
 

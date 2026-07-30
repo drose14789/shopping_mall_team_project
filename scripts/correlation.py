@@ -10,12 +10,14 @@ def process_data(input_file, output_path, mapping_file, engine):
     mapping = pd.read_excel(mapping_file)
     mapping_dict = dict(zip(mapping.iloc[:, 0], mapping.iloc[:, 1]))
 
-    # 분석 대상 컬럼
+    # 분석 대상 컬럼 (6개로 최적화)
     mean_cols = [
-        "주문금액", "노출수", "광고비 비중", "광고과금액", "상품클릭률", "구매전환율",
-        "상품주문수", "주문수량", "클릭수", "상품 상세 방문수", "상품 찜 유저수",
-        "장바구니 유저수", "장바구니 전환율", "반품건수", "반품률",
-        "ROAS", "찜전환율", "상품단가"
+        "주문금액",
+        "구매전환율",
+        "장바구니 전환율",
+        "상품단가",
+        "ROAS",
+        "반품안정성"
     ]
 
     os.makedirs(output_path, exist_ok=True)
@@ -39,7 +41,7 @@ def process_data(input_file, output_path, mapping_file, engine):
 
         df[cat_col_name] = df[cat_col_name].replace(mapping_dict)
 
-        # 전체 분석 대상 컬럼들을 숫자로 변환 (결측치는 0으로 채움)
+        # 분석 대상 컬럼들을 숫자로 변환 (결측치는 0으로 채움)
         for col in mean_cols:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.replace(",", "").str.replace("%", "")
@@ -137,7 +139,7 @@ def process_data(input_file, output_path, mapping_file, engine):
                         trans.rollback()
                         print(f"-> [전체 통합] 저장 실패: {e}")
 
-    # 결과 CSV 저장 (모든 결과 병합)
+    # 결과 Excel 저장 (모든 결과 병합)
     if file_corrs:
         final_corr_df = pd.concat(file_corrs, ignore_index=True)
         save_name = "통합_분기별_상관관계_병합.xlsx"

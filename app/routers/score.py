@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, UploadFile, Form
 import tempfile
 import os
 from app.services.score_service import evaluate_single_excel_file
@@ -7,9 +7,11 @@ import scripts.db_setting as db
 
 router = APIRouter(prefix="/score", tags=["Score Evaluation"])
 
-
 @router.post("/evaluate-multiple")
-async def evaluate_multiple_files(files: List[UploadFile] = File(...)):
+async def evaluate_multiple_files(
+    files: List[UploadFile] = File(...),
+    client_uuid: str = Form(...),
+):
   engine = db.get_engine()
   all_results = []
 
@@ -22,7 +24,7 @@ async def evaluate_multiple_files(files: List[UploadFile] = File(...)):
 
     try:
       # 기존에 만들어둔 단일 파일 분석 함수를 재사용하여 각각 분석
-      file_results = evaluate_single_excel_file(tmp_path, engine)
+      file_results = evaluate_single_excel_file(tmp_path, engine, client_uuid=client_uuid)
       all_results.extend(file_results)
     finally:
       # 분석이 끝나면 임시 파일 삭제

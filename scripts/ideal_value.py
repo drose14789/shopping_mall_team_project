@@ -9,7 +9,7 @@ def process_data_to_db(input_file, output_path, mapping_file, engine):
     mapping_dict = dict(zip(mapping.iloc[:, 0], mapping.iloc[:, 1]))
 
     all_total_results = []
-    all_outlier_results = []
+    all_ideal_value_results = []
     os.makedirs(output_path, exist_ok=True)
 
     mean_cols = [
@@ -43,7 +43,7 @@ def process_data_to_db(input_file, output_path, mapping_file, engine):
 
     # DB 테이블 초기화
     with engine.begin() as conn:
-        for tbl in ["outlier_stats", "total_stats"]:
+        for tbl in ["ideal_value_stats", "total_stats"]:
             try:
                 conn.execute(text(f"TRUNCATE TABLE {tbl}"))
                 print(f"-> 기존 {tbl} 테이블 데이터 초기화 완료")
@@ -74,10 +74,10 @@ def process_data_to_db(input_file, output_path, mapping_file, engine):
             df_top = df[df['주문금액'] > thresholds]
 
             if not df_top.empty:
-                outlier_result_korean = df_top.groupby([cat_col_name, quarter_col], as_index=False)[mean_cols].mean()
-                outlier_result_korean = outlier_result_korean.rename(
+                ideal_value_result_korean = df_top.groupby([cat_col_name, quarter_col], as_index=False)[mean_cols].mean()
+                ideal_value_result_korean = ideal_value_result_korean.rename(
                     columns={cat_col_name: 'category', quarter_col: 'quarter'})
-                all_outlier_results.append(outlier_result_korean.copy())
+                all_ideal_value_results.append(ideal_value_result_korean.copy())
                 print(f"-> {input_file} 처리 완료: 전체 및 상위 10% 데이터 집계 완료")
 
     # 루프 종료 후 전체/분기 통합 데이터 계산 및 최종 DB 적재 (total_stats)
@@ -104,29 +104,29 @@ def process_data_to_db(input_file, output_path, mapping_file, engine):
 
         final_total_df.to_excel(os.path.join(output_path, "통합_분기별_전체평균_병합.xlsx"), index=False)
 
-    # 루프 종료 후 전체/분기 통합 데이터 계산 및 최종 DB 적재 (outlier_stats)
-    if all_outlier_results:
-        base_outlier_df = pd.concat(all_outlier_results, ignore_index=True)
-        q_outliers = base_outlier_df.groupby('quarter', as_index=False)[mean_cols].mean()
-        q_outliers['category'] = q_outliers['quarter'].apply(lambda q: f"전체_Q{q}")
-        q_outliers['quarter'] = q_outliers['quarter'].astype(str)
+    # 루프 종료 후 전체/분기 통합 데이터 계산 및 최종 DB 적재 (ideal_value_stats)
+    if all_ideal_value_results:
+        base_ideal_value_df = pd.concat(all_ideal_value_results, ignore_index=True)
+        q_ideal_values = base_ideal_value_df.groupby('quarter', as_index=False)[mean_cols].mean()
+        q_ideal_values['category'] = q_ideal_values['quarter'].apply(lambda q: f"전체_Q{q}")
+        q_ideal_values['quarter'] = q_ideal_values['quarter'].astype(str)
 
-        all_outlier_row = base_outlier_df[mean_cols].mean().to_frame().T
-        all_outlier_row['category'] = "전체"
-        all_outlier_row['quarter'] = "전체"
+        all_ideal_value_row = base_ideal_value_df[mean_cols].mean().to_frame().T
+        all_ideal_value_row['category'] = "전체"
+        all_ideal_value_row['quarter'] = "전체"
 
-        final_outlier_df = pd.concat([base_outlier_df, q_outliers, all_outlier_row], ignore_index=True)
+        final_ideal_value_df = pd.concat([base_ideal_value_df, q_ideal_values, all_ideal_value_row], ignore_index=True)
 
         with engine.begin() as conn:
             try:
-                final_outlier_df.rename(columns=db_column_map).to_sql("outlier_stats", conn, if_exists="append",
+                final_ideal_value_df.rename(columns=db_column_map).to_sql("ideal_value_stats", conn, if_exists="append",
                                                                       index=False)
-                print("-> outlier_stats 최종 통합 데이터 DB 적재 완료")
+                print("-> ideal_value_stats 최종 통합 데이터 DB 적재 완료")
             except Exception as e:
-                print(f"-> outlier_stats DB 적재 실패: {e}")
+                print(f"-> ideal_value_stats DB 적재 실패: {e}")
                 raise e
 
-        final_outlier_df.to_excel(os.path.join(output_path, "통합_분기별_상위결과_병합.xlsx"), index=False)
+        final_ideal_value_df.to_excel(os.path.join(output_path, "통합_분기별_상위결과_병합.xlsx"), index=False)
 
     print(f"\n모든 데이터가 성공적으로 DB 및 CSV로 저장되었습니다!")
 
