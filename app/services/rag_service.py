@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 import re
+import time
+from functools import wraps
 from typing import Any, Callable
 
-from app.services.answer_builder import build_hybrid_answer
+from app.services.answer_builder import build_hybrid_answer as _build_hybrid_answer
 from app.services.document_filter import (
-    filter_documents_for_question,
+    filter_documents_for_question as _filter_documents_for_question,
 )
 from app.services.evidence_selector import (
-    select_evidence_documents,
+    select_evidence_documents as _select_evidence_documents,
 )
 from app.services.intent_router import analyze_question
 from app.services.legal_rules import get_legal_rule
-from app.services.query_builder import build_search_query
-from app.services.ollama_service import generate_answer
-from app.services.qdrant_service import search_documents
+from app.services.query_builder import build_search_query as _build_search_query
+from app.services.ollama_service import generate_answer as _generate_answer
+from app.services.qdrant_service import search_documents as _search_documents
 
 
 SEARCH_TOP_K = 5
@@ -40,8 +42,129 @@ MAX_SOURCE_CHILD_LENGTH = 800
 MAX_SOURCE_PARENT_LENGTH = 1400
 STRUCTURED_INTENT_MIN_CONFIDENCE = 0.8
 GENERAL_SEARCH_TOP_K = 8
+REVIEW_PRIVACY_SEARCH_TOP_K = 10
+REVIEW_PRIVACY_ARTICLE_2_TOP_K = 5
+REVIEW_PRIVACY_SOURCE_LIMIT = 4
+PLATFORM_EXPRESSION_SEARCH_TOP_K = 8
+PLATFORM_EXPRESSION_SOURCE_LIMIT = 3
 
 TokenCallback = Callable[[str], None]
+
+
+def _timed_call(
+    label: str,
+    function: Callable[..., Any],
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    started_at = time.perf_counter()
+    print(f"[RAG Timing] {label} 시작", flush=True)
+
+    try:
+        return function(*args, **kwargs)
+    finally:
+        elapsed = time.perf_counter() - started_at
+        print(
+            f"[RAG Timing] {label}: {elapsed:.2f}초",
+            flush=True,
+        )
+
+
+def build_search_query(*args: Any, **kwargs: Any) -> Any:
+    return _timed_call(
+        "질문 분석",
+        _build_search_query,
+        *args,
+        **kwargs,
+    )
+
+
+def search_documents(*args: Any, **kwargs: Any) -> Any:
+    return _timed_call(
+        "Qdrant 검색 + 임베딩 + reranker",
+        _search_documents,
+        *args,
+        **kwargs,
+    )
+
+
+def filter_documents_for_question(
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    return _timed_call(
+        "문서 필터",
+        _filter_documents_for_question,
+        *args,
+        **kwargs,
+    )
+
+
+def select_evidence_documents(
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    return _timed_call(
+        "근거 문장 선별",
+        _select_evidence_documents,
+        *args,
+        **kwargs,
+    )
+
+
+def generate_answer(*args: Any, **kwargs: Any) -> str:
+    return _timed_call(
+        "Ollama 답변 생성",
+        _generate_answer,
+        *args,
+        **kwargs,
+    )
+
+
+def build_hybrid_answer(
+    *args: Any,
+    **kwargs: Any,
+) -> str:
+    return _timed_call(
+        "하이브리드 답변 구성",
+        _build_hybrid_answer,
+        *args,
+        **kwargs,
+    )
+
+
+def _measure_total(
+    function: Callable[..., dict[str, Any]],
+) -> Callable[..., dict[str, Any]]:
+    @wraps(function)
+    def wrapper(
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        question = ""
+
+        if args:
+            question = str(args[0])
+        elif "question" in kwargs:
+            question = str(kwargs["question"])
+
+        started_at = time.perf_counter()
+
+        print(
+            f"[RAG Timing] 전체 시작: {question[:80]}",
+            flush=True,
+        )
+
+        try:
+            return function(*args, **kwargs)
+        finally:
+            elapsed = time.perf_counter() - started_at
+            print(
+                f"[RAG Timing] 전체 처리: {elapsed:.2f}초",
+                flush=True,
+            )
+
+    return wrapper
 
 
 def _build_streaming_generator(
@@ -1618,6 +1741,377 @@ def build_pre_payment_total_amount_answer() -> str:
     )
 
 
+def is_review_data_privacy_analysis_question(
+    question: str,
+) -> bool:
+    """
+    리뷰·상품평 데이터를 분석할 때 개인정보 문제가 있는지
+    묻는 질문을 판별합니다.
+    """
+    normalized = normalize_text(question)
+
+    review_terms = (
+        "리뷰",
+        "고객리뷰",
+        "상품리뷰",
+        "구매리뷰",
+        "후기",
+        "고객후기",
+        "구매후기",
+        "상품후기",
+        "상품평",
+        "평가글",
+    )
+
+    analysis_terms = (
+        "분석",
+        "데이터분석",
+        "통계",
+        "집계",
+        "분류",
+        "가공",
+        "활용",
+        "감성분석",
+        "텍스트마이닝",
+        "인공지능학습",
+        "ai학습",
+        "모델학습",
+    )
+
+    privacy_terms = (
+        "개인정보",
+        "개인정보문제",
+        "프라이버시",
+        "정보보호",
+        "동의",
+        "불법",
+        "위법",
+        "문제없",
+        "문제될",
+        "괜찮",
+        "해도되",
+        "가능",
+    )
+
+    return (
+        any(term in normalized for term in review_terms)
+        and any(term in normalized for term in analysis_terms)
+        and any(term in normalized for term in privacy_terms)
+    )
+
+
+def build_review_data_privacy_analysis_answer() -> str:
+    """리뷰 데이터 분석 시 개인정보 처리 원칙을 안내합니다."""
+    return (
+        "무조건 문제없다고 볼 수는 없습니다. 리뷰에 작성자 "
+        "닉네임, 사진, 주문정보나 다른 정보와 결합하여 개인을 "
+        "알아볼 수 있는 내용이 포함되어 있다면 개인정보에 "
+        "해당할 수 있고, 이를 분류·가공·통계 분석하는 행위도 "
+        "개인정보 처리에 포함됩니다.\n\n"
+        "쇼핑몰이 자체 리뷰를 서비스 개선이나 상품 품질 분석에 "
+        "이용하려면 적법한 이용 근거가 있는지, 당초 수집 목적과 "
+        "합리적으로 관련된 범위인지 확인해야 합니다. 분석에 "
+        "필요하지 않은 회원 ID, 이름, 연락처, 사진 등은 제거하고, "
+        "목적을 달성할 수 있다면 개인을 더 이상 알아볼 수 없도록 "
+        "익명 처리하는 것이 안전합니다.\n\n"
+        "가명 처리한 정보는 여전히 개인정보이므로 안전조치와 "
+        "이용 목적 제한을 지켜야 합니다. 개인을 식별할 수 없는 "
+        "집계·통계 형태로 분석하면 개인정보 위험을 줄일 수 있지만, "
+        "개인별 성향 분석이나 맞춤 광고처럼 당초 목적과 다른 "
+        "용도로 활용하려면 별도의 법적 근거나 동의가 필요한지 "
+        "추가로 검토해야 합니다."
+    )
+
+
+def _review_privacy_document_text(
+    document: dict[str, Any],
+) -> str:
+    return normalize_text(
+        " ".join(
+            str(document.get(key, "") or "")
+            for key in (
+                "heading",
+                "source_file",
+                "child_content",
+                "parent_content",
+            )
+        )
+    )
+
+
+def _extract_review_privacy_article_number(
+    document: dict[str, Any],
+) -> tuple[int, int | None] | None:
+    """
+    근거 카드의 heading에 표시된 조문 번호만 판별합니다.
+
+    본문에서 다른 조문을 인용한 경우에는 해당 인용 조문으로
+    잘못 분류하지 않습니다.
+    """
+    heading = str(
+        document.get("heading", "")
+        or ""
+    ).strip()
+
+    article_matches = re.findall(
+        r"제\s*(\d+)\s*조(?:\s*의\s*(\d+))?",
+        heading,
+    )
+
+    if not article_matches:
+        # heading이 비어 있는 예외적인 문서만 자식 청크의
+        # 앞부분에서 조문 제목을 확인합니다.
+        child_prefix = str(
+            document.get("child_content", "")
+            or ""
+        )[:250]
+
+        article_matches = re.findall(
+            r"제\s*(\d+)\s*조(?:\s*의\s*(\d+))?",
+            child_prefix,
+        )
+
+    if not article_matches:
+        return None
+
+    article_text, sub_article_text = article_matches[-1]
+
+    return (
+        int(article_text),
+        (
+            int(sub_article_text)
+            if sub_article_text
+            else None
+        ),
+    )
+
+
+def _review_privacy_article_group(
+    document: dict[str, Any],
+) -> str | None:
+    """
+    리뷰 분석 답변에 직접 필요한 개인정보 보호법 조항만
+    heading의 정확한 조문 번호를 기준으로 분류합니다.
+    """
+    text_key = _review_privacy_document_text(document)
+
+    if "개인정보보호법" not in text_key:
+        return None
+
+    article_number = _extract_review_privacy_article_number(
+        document
+    )
+
+    if article_number is None:
+        return None
+
+    article, sub_article = article_number
+
+    if article == 2 and sub_article is None:
+        return "article_2"
+
+    if article == 15 and sub_article is None:
+        return "article_15"
+
+    if article == 16 and sub_article is None:
+        return "article_16"
+
+    if article == 18 and sub_article is None:
+        return "article_18"
+
+    if article == 3 and sub_article is None:
+        return "article_3"
+
+    if article == 28 and sub_article == 2:
+        return "article_28_2"
+
+    return None
+
+def _has_review_privacy_article(
+    documents: list[dict[str, Any]],
+    article_group: str,
+) -> bool:
+    return any(
+        _review_privacy_article_group(document)
+        == article_group
+        for document in documents
+    )
+
+
+def _select_exact_review_privacy_article(
+    documents: list[dict[str, Any]],
+    article_group: str,
+) -> dict[str, Any] | None:
+    """heading의 정확한 조문 번호가 일치하는 문서만 선택합니다."""
+    matches = [
+        document
+        for document in documents
+        if _review_privacy_article_group(document)
+        == article_group
+    ]
+
+    if not matches:
+        return None
+
+    matches.sort(
+        key=lambda document: float(
+            document.get("rerank_score", 0.0)
+        ),
+        reverse=True,
+    )
+
+    return matches[0]
+
+
+def _same_source_document(
+    first: dict[str, Any],
+    second: dict[str, Any],
+) -> bool:
+    """두 근거 카드가 같은 부모 청크인지 확인합니다."""
+    first_key = str(
+        first.get("parent_id")
+        or first.get("child_id")
+        or (
+            f"{first.get('source_file', '')}:"
+            f"{first.get('heading', '')}"
+        )
+    )
+
+    second_key = str(
+        second.get("parent_id")
+        or second.get("child_id")
+        or (
+            f"{second.get('source_file', '')}:"
+            f"{second.get('heading', '')}"
+        )
+    )
+
+    return first_key == second_key
+
+
+def _prepend_review_privacy_article_2(
+    documents: list[dict[str, Any]],
+    article_2_document: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """제2조 근거를 첫 번째 카드로 고정합니다."""
+    if article_2_document is None:
+        return documents[:REVIEW_PRIVACY_SOURCE_LIMIT]
+
+    remaining = [
+        document
+        for document in documents
+        if not _same_source_document(
+            document,
+            article_2_document,
+        )
+    ]
+
+    return [
+        article_2_document,
+        *remaining,
+    ][:REVIEW_PRIVACY_SOURCE_LIMIT]
+
+
+def merge_review_privacy_documents(
+    *document_groups: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """여러 검색 결과를 부모 청크 기준으로 중복 제거합니다."""
+    merged: list[dict[str, Any]] = []
+    used_keys: set[str] = set()
+
+    for documents in document_groups:
+        for document in documents:
+            unique_key = str(
+                document.get("parent_id")
+                or document.get("child_id")
+                or (
+                    f"{document.get('source_file', '')}:"
+                    f"{document.get('heading', '')}"
+                )
+            )
+
+            if unique_key in used_keys:
+                continue
+
+            used_keys.add(unique_key)
+            merged.append(document)
+
+    return merged
+
+
+def select_review_data_privacy_sources(
+    documents: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    리뷰 데이터 분석 답변의 직접 근거만 선택합니다.
+
+    우선순위:
+    제2조 → 제15조 → 제16조 → 제18조
+    보조:
+    제3조 → 제28조의2
+    """
+    if not documents:
+        return []
+
+    priority_groups = (
+        "article_2",
+        "article_15",
+        "article_16",
+        "article_18",
+        "article_3",
+        "article_28_2",
+    )
+
+    grouped: dict[str, list[dict[str, Any]]] = {
+        group: []
+        for group in priority_groups
+    }
+
+    for document in documents:
+        group = _review_privacy_article_group(document)
+
+        if group is None:
+            continue
+
+        grouped[group].append(document)
+
+    for group_documents in grouped.values():
+        group_documents.sort(
+            key=lambda document: float(
+                document.get("rerank_score", 0.0)
+            ),
+            reverse=True,
+        )
+
+    selected: list[dict[str, Any]] = []
+    used_keys: set[str] = set()
+
+    for group in priority_groups:
+        if not grouped[group]:
+            continue
+
+        document = grouped[group][0]
+
+        unique_key = str(
+            document.get("parent_id")
+            or document.get("child_id")
+            or (
+                f"{document.get('source_file', '')}:"
+                f"{document.get('heading', '')}"
+            )
+        )
+
+        if unique_key in used_keys:
+            continue
+
+        used_keys.add(unique_key)
+        selected.append(document)
+
+        if len(selected) >= REVIEW_PRIVACY_SOURCE_LIMIT:
+            break
+
+    return selected
+
 def is_delivery_courier_privacy_outsourcing_question(
     question: str,
 ) -> bool:
@@ -1961,6 +2455,232 @@ def build_optional_privacy_consent_refusal_answer() -> str:
         "제공하지 않은 경우에는 해당 서비스 이용이 제한될 수 "
         "있습니다."
     )
+
+
+def is_platform_restricted_expression_question(
+    question: str,
+) -> bool:
+    """
+    특정 쇼핑 플랫폼에서 제한되거나 사용할 수 없는 표현을
+    묻는 질문을 판별합니다.
+    """
+    normalized = normalize_text(question)
+
+    platform_terms = (
+        "지그재그",
+        "무신사",
+        "에이블리",
+        "브랜디",
+        "쿠팡",
+        "스마트스토어",
+        "네이버쇼핑",
+        "오픈마켓",
+        "쇼핑플랫폼",
+        "플랫폼",
+    )
+
+    expression_terms = (
+        "표현",
+        "문구",
+        "광고문구",
+        "상세페이지문구",
+        "상품명",
+        "홍보문구",
+        "단어",
+    )
+
+    restriction_terms = (
+        "제한",
+        "금지",
+        "쓰면안",
+        "사용하면안",
+        "사용불가",
+        "못쓰",
+        "피해야",
+        "문제될",
+        "허용되지않",
+        "어떤표현",
+        "제한되는",
+    )
+
+    return (
+        any(term in normalized for term in platform_terms)
+        and any(term in normalized for term in expression_terms)
+        and any(term in normalized for term in restriction_terms)
+    )
+
+
+def extract_platform_name(question: str) -> str:
+    """질문에 포함된 대표 플랫폼 이름을 반환합니다."""
+    normalized = normalize_text(question)
+
+    platform_names = (
+        "지그재그",
+        "무신사",
+        "에이블리",
+        "브랜디",
+        "쿠팡",
+        "스마트스토어",
+        "네이버쇼핑",
+    )
+
+    for platform_name in platform_names:
+        if normalize_text(platform_name) in normalized:
+            return platform_name
+
+    return "해당 플랫폼"
+
+
+def build_platform_restricted_expression_answer(
+    platform_name: str,
+) -> str:
+    """
+    플랫폼 자체 정책과 법률상 제한 표현을 구분하여 안내합니다.
+    """
+    return (
+        f"{platform_name} 자체 입점·광고 운영정책에서 제한하는 "
+        "모든 표현은 현재 보유한 법률 문서만으로 단정할 수 "
+        "없습니다. 플랫폼별 내부 기준은 해당 판매자센터의 최신 "
+        "상품등록·광고 운영정책을 별도로 확인해야 합니다.\n\n"
+        "다만 법률상 온라인 상품명, 광고와 상세페이지에서는 "
+        "다음과 같은 표현이 문제될 수 있습니다.\n\n"
+        "• 사실과 다르거나 실제보다 부풀린 거짓·과장 표현\n"
+        "• 중요한 조건이나 제한을 숨겨 소비자를 오인시키는 "
+        "기만 표현\n"
+        "• 객관적인 근거 없이 다른 상품보다 우수하다고 하는 "
+        "부당 비교 표현\n"
+        "• 근거 없이 다른 사업자나 상품을 깎아내리는 비방 표현\n"
+        "• ‘무조건 반품·환불 불가’처럼 소비자의 법정 권리를 "
+        "일률적으로 제한하는 표현\n\n"
+        "따라서 구체적인 문구가 있다면 그 문구가 사실에 근거하는지, "
+        "중요 조건을 빠뜨리지 않았는지, 소비자를 오인시킬 가능성이 "
+        "있는지를 확인해야 합니다."
+    )
+
+
+def _platform_expression_document_text(
+    document: dict[str, Any],
+) -> str:
+    return normalize_text(
+        " ".join(
+            str(document.get(key, "") or "")
+            for key in (
+                "heading",
+                "source_file",
+                "child_content",
+                "parent_content",
+            )
+        )
+    )
+
+
+def _platform_expression_source_priority(
+    document: dict[str, Any],
+) -> int:
+    """
+    플랫폼 제한 표현 질문에 직접 관련된 법률 문서만 점수화합니다.
+    """
+    heading = str(
+        document.get("heading", "")
+        or ""
+    )
+    source_file = str(
+        document.get("source_file", "")
+        or ""
+    )
+    text_key = _platform_expression_document_text(document)
+
+    heading_key = normalize_text(heading)
+    source_key = normalize_text(source_file)
+
+    if (
+        "표시광고" in source_key
+        and "제3조" in heading_key
+        and (
+            "부당한표시광고행위의금지" in heading_key
+            or "부당한표시광고" in text_key
+        )
+    ):
+        return 100
+
+    if (
+        "전자상거래" in source_key
+        and "제21조" in heading_key
+        and "금지행위" in heading_key
+    ):
+        return 90
+
+    if (
+        "전자상거래" in source_key
+        and "제35조" in heading_key
+        and "소비자에게불리한계약" in heading_key
+    ):
+        return 75
+
+    if (
+        "상품정보제공고시" in source_key
+        or "상품정보제공고시" in text_key
+    ):
+        return 60
+
+    return 0
+
+
+def select_platform_expression_sources(
+    documents: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """법률상 제한 표현의 직접 근거만 우선순위대로 선택합니다."""
+    ranked: list[
+        tuple[int, float, dict[str, Any]]
+    ] = []
+
+    for document in documents:
+        priority = _platform_expression_source_priority(
+            document
+        )
+
+        if priority <= 0:
+            continue
+
+        ranked.append(
+            (
+                priority,
+                float(document.get("rerank_score", 0.0)),
+                document,
+            )
+        )
+
+    ranked.sort(
+        key=lambda item: (
+            item[0],
+            item[1],
+        ),
+        reverse=True,
+    )
+
+    selected: list[dict[str, Any]] = []
+    used_keys: set[str] = set()
+
+    for _, _, document in ranked:
+        unique_key = str(
+            document.get("parent_id")
+            or document.get("child_id")
+            or (
+                f"{document.get('source_file', '')}:"
+                f"{document.get('heading', '')}"
+            )
+        )
+
+        if unique_key in used_keys:
+            continue
+
+        used_keys.add(unique_key)
+        selected.append(document)
+
+        if len(selected) >= PLATFORM_EXPRESSION_SOURCE_LIMIT:
+            break
+
+    return selected
 
 
 def is_false_exaggerated_ad_question(
@@ -2556,6 +3276,85 @@ def build_packaging_opening_return_answer() -> str:
         "다만 상품을 실제로 사용하거나 소비자의 책임으로 상품 "
         "자체를 훼손하여 상품 가치가 현저히 감소한 경우에는 "
         "반품이 제한될 수 있습니다."
+    )
+
+
+def is_blanket_return_prohibition_notice_question(
+    question: str,
+) -> bool:
+    """
+    상세페이지나 약관에 일률적으로 '반품 불가'라고 표시해도
+    되는지 묻는 질문을 판별합니다.
+    """
+    normalized = normalize_text(question)
+
+    return_terms = (
+        "반품",
+        "환불",
+        "청약철회",
+        "교환",
+        "구매취소",
+    )
+
+    prohibition_terms = (
+        "반품불가",
+        "환불불가",
+        "청약철회불가",
+        "교환불가",
+        "취소불가",
+        "반품안됨",
+        "환불안됨",
+        "반품할수없",
+        "환불할수없",
+        "일체반품불가",
+        "무조건반품불가",
+    )
+
+    display_terms = (
+        "적어",
+        "써도",
+        "표시",
+        "기재",
+        "안내",
+        "공지",
+        "상세페이지",
+        "약관",
+        "문구",
+        "붙여",
+        "해도돼",
+        "해도되",
+        "가능",
+        "괜찮",
+    )
+
+    return (
+        any(term in normalized for term in return_terms)
+        and any(
+            term in normalized
+            for term in prohibition_terms
+        )
+        and any(
+            term in normalized
+            for term in display_terms
+        )
+    )
+
+
+def build_blanket_return_prohibition_notice_answer() -> str:
+    """일률적인 반품 불가 표시 질문에 사용할 검증된 답변입니다."""
+    return (
+        "원칙적으로 안 됩니다. 상품 상세페이지나 약관에 "
+        "‘반품 불가’라고 적었다는 사실만으로 소비자의 법정 "
+        "청약철회권을 없앨 수는 없습니다.\n\n"
+        "소비자의 책임으로 상품이 훼손되었거나, 사용·소비로 "
+        "상품 가치가 현저히 감소한 경우처럼 전자상거래법에서 "
+        "정한 청약철회 제한 사유가 실제로 있는 경우에는 "
+        "반품이 제한될 수 있습니다. 제한 대상 상품이라면 "
+        "소비자가 쉽게 알 수 있는 곳에 그 사실을 명확하게 "
+        "알려야 합니다.\n\n"
+        "따라서 모든 상품에 대해 일률적으로 ‘반품 불가’라고 "
+        "표시하거나 법정 청약철회 기간을 임의로 줄이는 문구는 "
+        "효력이 없거나 청약철회 방해로 문제될 수 있습니다."
     )
 
 
@@ -3228,6 +4027,7 @@ def clean_answer(answer: str) -> str:
     return answer.strip()
 
 
+@_measure_total
 def answer_question(
     question: str,
     on_token: TokenCallback | None = None,
@@ -3275,6 +4075,21 @@ def answer_question(
     matches_sold_out_refund = (
         structured_intent == "sold_out_refund"
         or is_out_of_stock_refund_question(question)
+    )
+    matches_blanket_return_prohibition = (
+        is_blanket_return_prohibition_notice_question(
+            question
+        )
+    )
+    matches_review_data_privacy = (
+        is_review_data_privacy_analysis_question(
+            question
+        )
+    )
+    matches_platform_restricted_expression = (
+        is_platform_restricted_expression_question(
+            question
+        )
     )
     matches_return_obstruction = (
         structured_intent == "return_obstruction"
@@ -3384,6 +4199,15 @@ def answer_question(
                 "쇼핑몰은 결제 전에 배송 방법, 배송비 부담자, "
                 "예상 배송기간을 알려야 하나요?"
             )
+        elif matches_review_data_privacy:
+            search_question = (
+                "개인정보 보호법 제2조의 개인정보와 개인정보 처리 "
+                "정의, 제3조의 목적 제한·최소 처리·익명 또는 "
+                "가명처리 원칙, 제15조의 개인정보 수집·이용 및 "
+                "당초 수집 목적과 합리적으로 관련된 추가 이용에 "
+                "따라 쇼핑몰 리뷰 데이터를 분석할 때 개인정보 "
+                "문제가 있나요?"
+            )
         elif is_delivery_courier_privacy_outsourcing_question(question):
             search_question = (
                 "상품 배송을 위해 택배회사에 이름, 주소, 연락처를 "
@@ -3403,6 +4227,15 @@ def answer_question(
             search_question = (
                 "필수항목이 아닌 개인정보 제공에 동의하지 않았다는 "
                 "이유로 회원가입을 거절할 수 있나요?"
+            )
+        elif matches_platform_restricted_expression:
+            search_question = (
+                "표시·광고의 공정화에 관한 법률 제3조의 "
+                "거짓·과장 광고, 기만적인 광고, 부당하게 비교하는 "
+                "광고, 비방적인 광고와 전자상거래법 제21조의 "
+                "거짓·과장 또는 기만적인 방법을 사용한 소비자 "
+                "유인 및 청약철회 방해에 해당하는 온라인 쇼핑몰 "
+                "상품명·광고·상세페이지의 제한 표현은 무엇인가요?"
             )
         elif is_false_exaggerated_ad_question(question):
             search_question = (
@@ -3457,6 +4290,13 @@ def answer_question(
                 "상품의 내용이나 상태를 확인하기 위해 포장을 뜯은 "
                 "경우에도 쇼핑몰이 반품을 거절할 수 있나요?"
             )
+        elif matches_blanket_return_prohibition:
+            search_question = (
+                "전자상거래법 제17조의 청약철회 제한 사유와 "
+                "제35조의 소비자에게 불리한 계약 금지에 따라 "
+                "쇼핑몰이 상품 상세페이지에 모든 상품은 반품 "
+                "불가라고 일률적으로 표시할 수 있나요?"
+            )
         elif matches_return_obstruction:
             search_question = "쇼핑몰이 반품을 방해하면 어떻게 되나요?"
         elif is_personal_seller_info_question(question):
@@ -3490,9 +4330,16 @@ def answer_question(
             search_question = "단순 변심으로도 반품할 수 있나요?"
 
 
+    if matches_review_data_privacy:
+        search_top_k = REVIEW_PRIVACY_SEARCH_TOP_K
+    elif matches_platform_restricted_expression:
+        search_top_k = PLATFORM_EXPRESSION_SEARCH_TOP_K
+    else:
+        search_top_k = SEARCH_TOP_K
+
     search_result = search_documents(
         question=search_question,
-        top_k=SEARCH_TOP_K,
+        top_k=search_top_k,
     )
 
     intent = search_result.get("intent")
@@ -3804,6 +4651,101 @@ def answer_question(
             "sources": source_documents,
         }
 
+    # 리뷰 데이터 분석 질문은 일반 검색 점수 필터가 비어도
+    # 검증된 답변과 실제 개인정보 보호법 검색 근거를 반환한다.
+    if matches_review_data_privacy:
+        raw_source_documents = sanitize_source_documents(
+            initial_documents
+        )
+
+        source_candidates = merge_review_privacy_documents(
+            relevant_documents,
+            searched_documents,
+            raw_source_documents,
+        )
+
+        article_2_document = (
+            _select_exact_review_privacy_article(
+                source_candidates,
+                "article_2",
+            )
+        )
+
+        # 제2조가 일반 검색에서 빠지면 제2조만 정확히 별도 검색한다.
+        if article_2_document is None:
+            article_2_result = search_documents(
+                question=(
+                    "개인정보 보호법 제2조 정의 개인정보란 "
+                    "다른 정보와 쉽게 결합하여 개인을 알아볼 수 "
+                    "있는 정보, 개인정보 처리란 수집 생성 연계 "
+                    "연동 기록 저장 보유 가공 편집 검색 출력 "
+                    "정정 복구 이용 제공 공개 파기"
+                ),
+                top_k=REVIEW_PRIVACY_ARTICLE_2_TOP_K,
+            )
+
+            article_2_documents = sanitize_source_documents(
+                article_2_result.get("documents", [])
+            )
+
+            article_2_document = (
+                _select_exact_review_privacy_article(
+                    article_2_documents,
+                    "article_2",
+                )
+            )
+
+            source_candidates = merge_review_privacy_documents(
+                source_candidates,
+                article_2_documents,
+            )
+
+        source_documents = select_review_data_privacy_sources(
+            source_candidates
+        )
+
+        # 제2조 검색 후에도 직접 근거가 3개 미만이면
+        # 제15조·제16조·제18조를 한 번 보충 검색한다.
+        if len(source_documents) < 3:
+            supplement_result = search_documents(
+                question=(
+                    "개인정보 보호법 제15조 개인정보 수집 이용, "
+                    "제16조 개인정보 수집 제한과 최소 수집, "
+                    "제18조 개인정보 목적 외 이용 제공 제한"
+                ),
+                top_k=REVIEW_PRIVACY_SEARCH_TOP_K,
+            )
+
+            supplement_documents = sanitize_source_documents(
+                supplement_result.get("documents", [])
+            )
+
+            source_candidates = merge_review_privacy_documents(
+                source_candidates,
+                supplement_documents,
+            )
+
+            source_documents = select_review_data_privacy_sources(
+                source_candidates
+            )
+
+        source_documents = _prepend_review_privacy_article_2(
+            source_documents,
+            article_2_document,
+        )
+
+        answer = build_review_data_privacy_analysis_answer()
+
+        if on_token is not None:
+            on_token(answer)
+
+        return {
+            "question": question,
+            "answer": answer,
+            "intent": "review_data_privacy_analysis",
+            "sources": source_documents,
+        }
+
     # 배송 목적의 택배회사 개인정보 전달 질문은 제3자 제공과
     # 처리위탁을 혼동하지 않도록 검증된 답변을 반환한다.
     if is_delivery_courier_privacy_outsourcing_question(question):
@@ -3865,6 +4807,60 @@ def answer_question(
             "question": question,
             "answer": build_optional_privacy_consent_refusal_answer(),
             "intent": "optional_privacy_consent_refusal",
+            "sources": source_documents,
+        }
+
+    # 특정 플랫폼의 제한 표현 질문은 플랫폼 내부정책을
+    # 법률 문서만으로 단정하지 않고, 법률상 금지 표현을 안내한다.
+    if matches_platform_restricted_expression:
+        raw_source_documents = sanitize_source_documents(
+            initial_documents
+        )
+
+        source_candidates = [
+            *raw_source_documents,
+            *searched_documents,
+            *relevant_documents,
+        ]
+
+        source_documents = select_platform_expression_sources(
+            source_candidates
+        )
+
+        # 직접 근거가 부족하면 핵심 법 조항을 한 번 보충 검색한다.
+        if len(source_documents) < 2:
+            supplement_result = search_documents(
+                question=(
+                    "표시광고법 제3조 부당한 표시 광고 행위의 금지 "
+                    "거짓 과장 기만 부당 비교 비방 광고, "
+                    "전자상거래법 제21조 금지행위 거짓 과장 "
+                    "기만적인 방법 소비자 유인 청약철회 방해"
+                ),
+                top_k=PLATFORM_EXPRESSION_SEARCH_TOP_K,
+            )
+
+            supplement_documents = sanitize_source_documents(
+                supplement_result.get("documents", [])
+            )
+
+            source_documents = select_platform_expression_sources(
+                [
+                    *source_candidates,
+                    *supplement_documents,
+                ]
+            )
+
+        answer = build_platform_restricted_expression_answer(
+            extract_platform_name(question)
+        )
+
+        if on_token is not None:
+            on_token(answer)
+
+        return {
+            "question": question,
+            "answer": answer,
+            "intent": "platform_restricted_expression",
             "sources": source_documents,
         }
 
@@ -4026,6 +5022,30 @@ def answer_question(
             "question": question,
             "answer": build_packaging_opening_return_answer(),
             "intent": "packaging_opening_return",
+            "sources": source_documents,
+        }
+
+    # 상품 상세페이지나 약관에 일률적인 반품 불가 문구를
+    # 표시할 수 있는지 묻는 질문은 1B 모델의 자유 생성을 거치지
+    # 않고 검증된 답변과 실제 검색 근거를 반환한다.
+    if matches_blanket_return_prohibition:
+        source_documents = (
+            relevant_documents
+            if relevant_documents
+            else searched_documents[:MAX_CONTEXT_DOCUMENTS]
+        )
+
+        answer = (
+            build_blanket_return_prohibition_notice_answer()
+        )
+
+        if on_token is not None:
+            on_token(answer)
+
+        return {
+            "question": question,
+            "answer": answer,
+            "intent": "blanket_return_prohibition",
             "sources": source_documents,
         }
 
