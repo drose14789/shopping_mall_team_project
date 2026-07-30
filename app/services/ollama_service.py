@@ -16,7 +16,7 @@ OLLAMA_URL = os.getenv(
 # 법률 RAG 답변에 사용하는 모델
 OLLAMA_MODEL = os.getenv(
     "OLLAMA_MODEL",
-    "gemma3:4b",
+    "gemma3:1b",
 )
 
 # 일반 대화에 사용하는 빠른 모델
@@ -26,6 +26,13 @@ GENERAL_CHAT_MODEL = os.getenv(
 )
 
 REQUEST_TIMEOUT = 180
+
+# 마지막 요청 후 모델을 메모리에 유지하는 시간입니다.
+# Docker Compose 환경변수 OLLAMA_KEEP_ALIVE로 변경할 수 있습니다.
+OLLAMA_KEEP_ALIVE = os.getenv(
+    "OLLAMA_KEEP_ALIVE",
+    "30m",
+)
 
 
 GENERAL_CHAT_SYSTEM_PROMPT = """
@@ -64,6 +71,7 @@ def _build_payload(
         "model": selected_model,
         "prompt": prompt,
         "stream": stream,
+        "keep_alive": OLLAMA_KEEP_ALIVE,
         "options": options,
     }
 
