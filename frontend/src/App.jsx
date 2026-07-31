@@ -26,7 +26,7 @@ export default function App() {
             ? "상품 성과 파일 업로드"
             : screen === "results"
                 ? "상품 액션 추천 결과"
-                : screen === "detail" 
+                : screen === "detail"
                     ? "상품 상세 진단"
                     : screen === "history"
                         ? "분석 이력"
@@ -39,7 +39,7 @@ export default function App() {
                                     : screen === "basis"
                                         ? "진단 기준"
                                         : undefined}/>
-        {screen === "main" ? (<MainScreen setScreen={setScreen}/>) : screen === "upload" ? (<UploadScreen setScreen={setScreen}/>) : screen === "results" ? (<ResultsScreen setScreen={setScreen}/>) : screen === "detail" ? (<DetailScreen setScreen={setScreen}/>) : screen === "history" ? (<HistoryScreen setScreen={setScreen}/>) : screen === "today" ? (<TodayScreen setScreen={setScreen}/>) : screen === "diag" ? (<DiagScreen setScreen={setScreen}/>) : screen === "chat" ? (<ChatScreen setScreen={setScreen}/>) : (<BasisScreen setScreen={setScreen}/>)}
+        {screen === "main" ? (<MainScreen setScreen={setScreen}/>) : screen === "upload" ? (<UploadScreen setScreen={setScreen}/>) : screen === "results" ? (<ResultsScreen setScreen={setScreen}/>) : screen === "detail" ? (<DetailScreen setScreen={setScreen}/>) : screen === "history" ? (<HistoryScreen setScreen={setScreen}/>) : screen === "today" ? (<TodayScreen setScreen={setScreen}/>) : screen === "diag" ? (<DiagScreen setScreen={setScreen}/>) : screen === "chat" ? (<ChatScreen setScreen={setScreen}/>) : screen === "basis" ? (<BasisScreen setScreen={setScreen}/>) : null}
       </div>
     </div>);
 }

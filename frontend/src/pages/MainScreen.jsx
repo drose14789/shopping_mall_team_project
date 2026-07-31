@@ -56,66 +56,146 @@ export default function MainScreen({ setScreen, }) {
         </div>
       </div>
 
-      {/* Feature cards — 기능 소개 전용 (이동 없음) */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* 1. 상품 액션 추천 */}
-        <div className="rounded-xl border p-5 transition-colors" style={{
-            backgroundColor: "#F8FBFF",
-            borderColor: "#BFDBFE",
-        }}>
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10"/>
-                <line x1="12" y1="20" x2="12" y2="4"/>
-                <line x1="6" y1="20" x2="6" y2="14"/>
-              </svg>
+      {/* Analysis flow summary */}
+      <div className="bg-white rounded-xl border border-slate-100 p-6">
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <div>
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#2563EB"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </div>
+
+              <h3 className="font-semibold text-slate-800 text-sm">
+                ActionFit AI 분석 흐름
+              </h3>
             </div>
-            <span className="text-[10px] font-bold bg-blue-600 text-white px-1.5 py-0.5 rounded-md flex-shrink-0">
-              핵심
-            </span>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              상품 성과 파일을 업로드하면 아래 흐름에 따라 오늘 실행할 추천 액션을 생성합니다.
+            </p>
           </div>
-          <h3 className="font-semibold text-slate-800 text-sm mb-1.5">
-            상품 액션 추천
-          </h3>
-          <p className="text-slate-500 text-xs leading-relaxed">
-            상품 성과 데이터를 분석해 광고 확대, 유지, 개선,
-            축소 액션을 추천해요.
-          </p>
+
+          <button
+            onClick={() => setScreen("basis")}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100 transition"
+          >
+            진단 기준 보기
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
         </div>
 
-        {/* 2. 판매 전 카테고리 진단 */}
-        <div className="rounded-xl border bg-white border-slate-100 p-5 transition-colors hover:bg-slate-50/60">
-          <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center mb-3">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-          </div>
-          <h3 className="font-semibold text-slate-800 text-sm mb-1.5">
-            판매 전 카테고리 진단
-          </h3>
-          <p className="text-slate-500 text-xs leading-relaxed">
-            카테고리 적합성과 시즌별 판매 가능성을 확인해요.
-          </p>
+        <div className="flex items-start gap-1.5 overflow-x-auto pb-2">
+          {[
+            {
+              step: "1",
+              title: "파일 업로드",
+              desc: "상품 성과 파일 등록",
+              icon: "📤",
+            },
+            {
+              step: "2",
+              title: "데이터 정제",
+              desc: "필수 컬럼 확인",
+              icon: "🧾",
+            },
+            {
+              step: "3",
+              title: "지표 계산",
+              desc: "CTR·ROAS 등 계산",
+              icon: "🧮",
+            },
+            {
+              step: "4",
+              title: "시즌·카테고리 비교",
+              desc: "동일 맥락 비교",
+              icon: "📊",
+            },
+            {
+              step: "5",
+              title: "16가지 유형 분류",
+              desc: "상품 상태 진단",
+              icon: "🏷️",
+            },
+            {
+              step: "6",
+              title: "리뷰 원인 검증",
+              desc: "키워드 보조 분석",
+              icon: "💬",
+            },
+            {
+              step: "7",
+              title: "오늘의 액션",
+              desc: "우선순위 추천",
+              icon: "🎯",
+            },
+            {
+              step: "8",
+              title: "성과 리포트",
+              desc: "변화 비교",
+              icon: "📈",
+            },
+          ].map((item, i, arr) => (
+            <div key={item.step} className="flex items-start gap-1.5 flex-shrink-0">
+              <div className="flex flex-col items-center" style={{ width: 98 }}>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center mb-2 text-lg">
+                  {item.icon}
+                </div>
+
+                <div className="text-[9px] font-bold px-2 py-0.5 rounded-md mb-1.5 whitespace-nowrap bg-blue-100 text-blue-600">
+                  STEP {item.step}
+                </div>
+
+                <p className="text-[11px] font-bold text-slate-700 text-center leading-snug">
+                  {item.title}
+                </p>
+
+                <p className="text-[10px] text-slate-400 text-center leading-snug mt-0.5">
+                  {item.desc}
+                </p>
+              </div>
+
+              {i < arr.length - 1 && (
+                <div className="flex-shrink-0 mt-5 pt-0.5">
+                  <svg
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#CBD5E1"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
 
-        {/* 3. 쇼핑몰 법 규제 챗봇 */}
-        <div className="rounded-xl border bg-white border-slate-100 p-5 transition-colors hover:bg-slate-50/60">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mb-3">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="9" y1="13" x2="15" y2="13"/>
-              <line x1="9" y1="17" x2="12" y2="17"/>
-            </svg>
-          </div>
-          <h3 className="font-semibold text-slate-800 text-sm mb-1.5">
-            쇼핑몰 법 규제 챗봇
-          </h3>
-          <p className="text-slate-500 text-xs leading-relaxed">
-            광고 문구, 상세페이지, 반품·환불 관련 리스크를
-            확인해요.
+        <div className="mt-4 p-3 rounded-lg border border-blue-100 bg-blue-50">
+          <p className="text-[11px] leading-relaxed text-blue-700">
+            ActionFit AI는 단순히 점수 하나만 보고 판단하지 않고, 광고 효율·구매 퍼널·반품 리스크·시즌/카테고리 맥락·리뷰 키워드·이전 분석 대비 변화를 함께 고려합니다.
           </p>
         </div>
       </div>
