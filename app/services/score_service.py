@@ -106,7 +106,8 @@ def ensure_evaluation_table_exists(engine):
         score_conv_rate FLOAT,
         score_return_stability FLOAT,
         score_roas FLOAT,
-        weight_unit_price FLOAT,
+        weight_click_rate FLOAT,
+        weight_wish_conv FLOAT,
         weight_cart_conv FLOAT,
         weight_conv_rate FLOAT,
         weight_return_stability FLOAT,
@@ -210,9 +211,10 @@ def evaluate_single_excel_file(user_excel_path, engine, client_uuid: str = "defa
 
         raw_weights = {}
         indicator_mapping = {
+            'click_rate': '상품클릭률',
+            'wish_conv_rate': '찜전환율',
             '구매전환율': 'conv_rate',
             '장바구니전환율': 'cart_conv_rate',
-            '상품단가': 'unit_price',
             'ROAS': 'roas',
             '반품안정성': 'return_stability'
         }
@@ -236,11 +238,12 @@ def evaluate_single_excel_file(user_excel_path, engine, client_uuid: str = "defa
                 raw_weights[ind2_key] = max(raw_weights.get(ind2_key, 0.0), corr_val)
 
         default_fallback_weights = {
-            'unit_price': 0.20,
-            'cart_conv_rate': 0.20,
-            'conv_rate': 0.30,
+            'click_rate': 0.15,
+            'wish_conv_rate': 0.15,
+            'cart_conv_rate': 0.15,
+            'conv_rate': 0.20,
             'return_stability': 0.15,
-            'roas': 0.15,
+            'roas': 0.20,
         }
 
         if len(raw_weights) >= 3:
@@ -330,7 +333,8 @@ def evaluate_single_excel_file(user_excel_path, engine, client_uuid: str = "defa
                 percentile_scores[col] = 50.0
 
         evaluation_metrics = {
-            'unit_price': '상품단가',
+            'click_rate': '상품클릭률',
+            'wish_conv_rate': '찜전환율',
             'cart_conv_rate': '장바구니전환율',
             'conv_rate': '구매전환율',
             'return_stability': '반품안정성',
@@ -410,7 +414,8 @@ def evaluate_single_excel_file(user_excel_path, engine, client_uuid: str = "defa
             'score_conv_rate': [percentile_scores['conv_rate']],
             'score_return_stability': [percentile_scores['return_stability']],
             'score_roas': [percentile_scores['roas']],
-            'weight_unit_price': [dynamic_weights['unit_price']],
+            'weight_click_rate': [dynamic_weights['click_rate']],
+            'weight_wish_conv': [dynamic_weights['wish_conv_rate']],
             'weight_cart_conv': [dynamic_weights['cart_conv_rate']],
             'weight_conv_rate': [dynamic_weights['conv_rate']],
             'weight_return_stability': [dynamic_weights['return_stability']],
