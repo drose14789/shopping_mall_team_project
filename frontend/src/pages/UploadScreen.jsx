@@ -1,8 +1,841 @@
 import React, { useState, useRef } from "react";
 import {UploadIllustration} from '../components/common/Icons'; 
 import * as AllData from '../constants/data';
+import * as XLSX from "xlsx";
+
+const SEASON_EMOJI = {
+  겨울: "❄️",
+  봄: "🌸",
+  여름: "☀️",
+  가을: "🍂",
+};
+
+function addMonthsToYearMonth(yearMonth, monthsToAdd) {
+  if (!yearMonth) return "";
+
+  const [year, month] = yearMonth.split("-").map(Number);
+  const date = new Date(year, month - 1 + monthsToAdd, 1);
+
+  const nextYear = date.getFullYear();
+  const nextMonth = String(date.getMonth() + 1).padStart(2, "0");
+
+  return `${nextYear}-${nextMonth}`;
+}
+
+function getSeasonFromMonth(month) {
+  if ([1, 2, 3].includes(month)) return "겨울";
+  if ([4, 5, 6].includes(month)) return "봄";
+  if ([7, 8, 9].includes(month)) return "여름";
+  if ([10, 11, 12].includes(month)) return "가을";
+  return "";
+}
+
+function getSeasonFromPeriod(startMonth, endMonth) {
+  if (!startMonth || !endMonth) return "";
+
+  const [startYear, startM] = startMonth.split("-").map(Number);
+
+  const months = [0, 1, 2].map((offset) => {
+    const date = new Date(startYear, startM - 1 + offset, 1);
+    return date.getMonth() + 1;
+  });
+
+  const seasonCounts = months.reduce((acc, month) => {
+    const season = getSeasonFromMonth(month);
+    acc[season] = (acc[season] || 0) + 1;
+    return acc;
+  }, {});
+
+  return Object.entries(seasonCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+
+const OPTIONAL_COLS = [
+  "상품단가",
+  "카테고리",
+  "시즌",
+  "광고비비중",
+  "클릭률",
+  "찜 관심도",
+  "장바구니 전환율",
+  "구매전환율",
+  "반품률",
+  "ROAS",
+];
+
+const NUMERIC_COLS = [
+  "노출수",
+  "클릭수",
+  "광고과금액",
+  "주문금액",
+  "상품 상세 방문수",
+  "장바구니 유저수",
+  "찜 유저수",
+  "상품주문수",
+  "반품건수",
+  "상품단가",
+];
+
+const REQUIRED_UPLOAD_COLS = [
+  "상품ID",
+  "상품명",
+  "노출수",
+  "클릭수",
+  "광고과금액",
+  "주문금액",
+  "상품 상세 방문수",
+  "장바구니 유저수",
+  "찜 유저수",
+  "상품주문수",
+  "반품건수",
+];
+
+function normalizeHeader(value) {
+  return String(value || "").trim();
+}
+
+function normalizeValue(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function cleanNumber(value) {
+  const raw = normalizeValue(value);
+
+  if (raw === "" || raw === "-" || raw.toUpperCase() === "N/A" || raw === "없음") {
+    return {
+      type: "need_check",
+      value: raw,
+      cleanedValue: raw,
+      message: "빈칸, 없음, N/A 값은 0인지 누락인지 확인이 필요합니다.",
+    };
+  }
+
+  const hasPercent = raw.includes("%");
+
+  const cleaned = raw
+    .replace(/,/g, "")
+    .replace(/₩/g, "")
+    .replace(/원/g, "")
+    .replace(/건/g, "")
+    .replace(/개/g, "")
+    .replace(/%/g, "")
+    .replace(/\s/g, "");
+
+  // 28.500 같은 값은 소수점인지 천 단위인지 애매해서 확인 필요 처리
+  if (/^\d+\.\d{3}$/.test(cleaned)) {
+    return {
+      type: "need_check",
+      value: raw,
+      cleanedValue: cleaned,
+      message: "소수점인지 천 단위 구분인지 애매한 값입니다.",
+    };
+  }
+
+  const num = Number(cleaned);
+
+  if (!Number.isFinite(num)) {
+    return {
+      type: "need_check",
+      value: raw,
+      cleanedValue: raw,
+      message: "숫자로 변환할 수 없는 값입니다.",
+    };
+  }
+
+  if (hasPercent) {
+    return {
+      type: "need_check",
+      value: raw,
+      cleanedValue: num,
+      message: "원본 수치 컬럼에 비율값이 들어간 것으로 보여 확인이 필요합니다.",
+    };
+  }
+
+  if (raw !== String(num)) {
+    return {
+      type: "auto_cleaned",
+      value: raw,
+      cleanedValue: num,
+      message: "쉼표, 통화기호, 단위 등을 제거해 자동 정제했습니다.",
+    };
+  }
+
+  return {
+    type: "normal",
+    value: raw,
+    cleanedValue: num,
+    message: "정상 숫자 값입니다.",
+  };
+}
+
+function makeIssue({ type, rowIndex, column, originalValue, cleanedValue, message }) {
+  return {
+    id: `${type}-${rowIndex}-${column}-${Math.random().toString(16).slice(2)}`,
+    type,
+    rowIndex,
+    column,
+    originalValue,
+    cleanedValue,
+    message,
+  };
+}
+
+function typeLabel(type) {
+  if (type === "auto_cleaned") return "자동 정제";
+  if (type === "need_check") return "확인 필요";
+  if (type === "required_error") return "필수 오류";
+  if (type === "reference") return "참고";
+  return "정상";
+}
+
+function safeRate(numerator, denominator) {
+  if (!denominator || denominator === 0) return "";
+  return Number(((numerator / denominator) * 100).toFixed(2));
+}
+
+function getCleanNumber(row, col) {
+  if (!col) return 0;
+
+  const value = row[col];
+  const result = cleanNumber(value);
+
+  return result.type === "need_check" ? 0 : Number(result.cleanedValue || 0);
+}
+
+const COLUMN_ALIASES = {
+  상품ID: [
+    "상품ID",
+    "*상품ID",
+    "상품 ID",
+    "상품id",
+    "상품 id",
+    "상품번호",
+    "상품 번호",
+    "product_id",
+    "product id",
+  ],
+
+  상품명: [
+    "상품명",
+    "*상품명",
+    "상품 이름",
+    "상품이름",
+    "상품명/옵션명",
+    "옵션명",
+    "product_name",
+    "product name",
+  ],
+
+  노출수: [
+    "노출수",
+    "노출 수",
+    "노출",
+    "impression",
+    "impressions",
+  ],
+
+  클릭수: [
+    "클릭수",
+    "클릭 수",
+    "클릭",
+    "click",
+    "clicks",
+  ],
+
+  광고과금액: [
+    "광고과금액",
+    "광고 과금액",
+    "광고비",
+    "광고 비용",
+    "광고비용",
+    "과금액",
+    "광고 집행액",
+    "ad_cost",
+    "ad cost",
+  ],
+
+  주문금액: [
+    "주문금액",
+    "주문 금액",
+    "매출",
+    "매출액",
+    "결제금액",
+    "order_amount",
+    "order amount",
+  ],
+
+  "상품 상세 방문수": [
+    "상품 상세 방문수",
+    "상품상세방문수",
+    "상세 방문수",
+    "상세페이지 방문수",
+    "상품 상세조회수",
+    "상품상세조회수",
+    "detail_visit",
+    "detail visit",
+  ],
+
+  "장바구니 유저수": [
+    "장바구니 유저수",
+    "장바구니유저수",
+    "장바구니 수",
+    "장바구니수",
+    "장바구니",
+    "cart_users",
+    "cart users",
+  ],
+
+  "찜 유저수": [
+    "찜 유저수",
+    "찜유저수",
+    "상품 찜 유저수",
+    "상품찜유저수",
+    "상품 찜수",
+    "찜수",
+    "wish_users",
+    "wish users",
+  ],
+
+  상품주문수: [
+    "상품주문수",
+    "상품 주문수",
+    "주문수",
+    "주문 수",
+    "주문건수",
+    "주문 건수",
+    "order_count",
+    "order count",
+  ],
+
+  반품건수: [
+    "반품건수",
+    "반품 건수",
+    "반품수",
+    "반품 수",
+    "return_count",
+    "return count",
+  ],
+
+  "판매 사이트": [
+    "판매 사이트",
+    "판매사이트",
+    "플랫폼",
+    "판매채널",
+    "채널",
+  ],
+};
+
+const OPTIONAL_ALIASES = {
+  카테고리: ["카테고리", "카테고리(3>4차)", "카테고리명", "상품 카테고리"],
+  이미지URL: ["이미지URL", "이미지 URL", "이미지url"],
+  상품등록일: ["상품등록일", "상품 등록일"],
+  배송유형: ["배송유형", "배송 유형"],
+  광고전환지수: ["광고전환지수", "광고 전환 지수"],
+  광고비비중: ["광고비 비중", "광고비비중", "광고 비중"],
+  상품클릭률: ["상품클릭률", "클릭률"],
+  구매전환율: ["구매전환율"],
+  장바구니전환율: ["장바구니 전환율", "장바구니전환율"],
+  반품률: ["반품률"],
+  주문수량: ["주문수량", "주문 수량"],
+  상품단가: ["상품단가", "상품 단가", "판매가", "상품금액"],
+};
+
+function normalizeColumnName(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, "")
+    .replace(/^\*/, "")
+    .replace(/[()\[\]{}]/g, "")
+    .replace(/[·ㆍ]/g, "")
+    .replace(/_/g, "")
+    .toLowerCase();
+}
+
+function getAliasCandidates(canonicalName) {
+  return COLUMN_ALIASES[canonicalName] || OPTIONAL_ALIASES[canonicalName] || [canonicalName];
+}
+
+function findActualColumn(headers, canonicalName) {
+  const candidates = getAliasCandidates(canonicalName).map(normalizeColumnName);
+
+  return (
+    headers.find((header) => candidates.includes(normalizeColumnName(header))) || null
+  );
+}
+
+function buildColumnMap(headers, requiredCols) {
+  const map = {};
+
+  requiredCols.forEach((col) => {
+    map[col] = findActualColumn(headers, col);
+  });
+
+  Object.keys(OPTIONAL_ALIASES).forEach((col) => {
+    map[col] = findActualColumn(headers, col);
+  });
+
+  return map;
+}
+
+function getHeaderScore(row) {
+  const headers = row.map((cell) => String(cell || "").trim()).filter(Boolean);
+
+  if (headers.length < 3) return -1;
+
+  const allCanonicalNames = [
+    ...Object.keys(COLUMN_ALIASES),
+    ...Object.keys(OPTIONAL_ALIASES),
+  ];
+
+  let score = 0;
+
+  allCanonicalNames.forEach((canonicalName) => {
+    if (findActualColumn(headers, canonicalName)) {
+      if (COLUMN_ALIASES[canonicalName]) {
+        score += 10;
+      } else {
+        score += 3;
+      }
+    }
+  });
+
+  const joined = headers.join(" ");
+
+  if (joined.includes("상품ID") || joined.includes("*상품ID")) score += 30;
+  if (joined.includes("상품명") || joined.includes("*상품명")) score += 30;
+  if (joined.includes("노출수")) score += 20;
+  if (joined.includes("클릭수")) score += 20;
+  if (joined.includes("광고과금액")) score += 20;
+
+  // 제목/설명 행은 감점
+  if (headers.length <= 2) score -= 50;
+  if (joined.includes("상품별 성과")) score -= 50;
+  if (joined.includes("자세히 살펴볼 상품")) score -= 50;
+
+  return score;
+}
+
+function findHeaderRowIndex(sheetRows) {
+  // 1순위: 상품ID + 상품명 둘 다 있는 행을 강제로 헤더로 판단
+  const directIndex = sheetRows.findIndex((row) => {
+    const normalizedCells = row.map((cell) => normalizeColumnName(cell));
+
+    const hasProductId = normalizedCells.some((cell) =>
+      ["상품id", "상품번호", "productid"].includes(cell)
+    );
+
+    const hasProductName = normalizedCells.some((cell) =>
+      ["상품명", "상품이름", "상품명/옵션명", "옵션명", "productname"].includes(cell)
+    );
+
+    return hasProductId && hasProductName;
+  });
+
+  if (directIndex !== -1) return directIndex;
+
+  // 2순위: 점수 기반 탐색
+  let bestIndex = 0;
+  let bestScore = -999;
+
+  sheetRows.forEach((row, rowIndex) => {
+    const score = getHeaderScore(row);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = rowIndex;
+    }
+  });
+
+  return bestIndex;
+}
+
+function makeCanonicalRow(originalRow, headers, columnMap, requiredCols) {
+  const canonicalRow = {};
+  const usedActualColumns = new Set();
+
+  requiredCols.forEach((canonicalCol) => {
+    const actualCol = columnMap[canonicalCol];
+
+    if (actualCol) {
+      canonicalRow[canonicalCol] = originalRow[actualCol] ?? "";
+      usedActualColumns.add(actualCol);
+    } else {
+      canonicalRow[canonicalCol] = "";
+    }
+  });
+
+  Object.keys(OPTIONAL_ALIASES).forEach((canonicalCol) => {
+    const actualCol = columnMap[canonicalCol];
+
+    if (actualCol) {
+      canonicalRow[canonicalCol] = originalRow[actualCol] ?? "";
+      usedActualColumns.add(actualCol);
+    }
+  });
+
+  headers.forEach((header) => {
+    if (!usedActualColumns.has(header)) {
+      canonicalRow[header] = originalRow[header] ?? "";
+    }
+  });
+  canonicalRow.__rowIndex = originalRow.__rowIndex;
+
+  return canonicalRow;
+}
+
+function isSummaryTotalRow(row) {
+  const productId = normalizeValue(row["상품ID"]);
+  const productName = normalizeValue(row["상품명"]);
+
+  const textValues = Object.values(row)
+    .map((v) => normalizeValue(v))
+    .join(" ");
+
+  // 텍스트에 총계/합계/전체/total 등이 직접 들어간 경우
+  const hasSummaryKeyword =
+    /총계|합계|전체\s*합계|소계|total|sum/i.test(textValues);
+
+  if (hasSummaryKeyword) return true;
+
+  // 상품ID와 상품명이 둘 다 비어 있는데 핵심 숫자 컬럼들이 많이 채워진 경우
+  // 지그재그 원본의 마지막 합산 행 같은 케이스
+  const coreNumericCols = [
+    "노출수",
+    "클릭수",
+    "광고과금액",
+    "주문금액",
+    "상품 상세 방문수",
+    "찜 유저수",
+    "장바구니 유저수",
+    "상품주문수",
+    "반품건수",
+  ];
+
+  const filledNumericCount = coreNumericCols.filter((col) => {
+    const value = normalizeValue(row[col]);
+    return value !== "" && value !== "-" && value !== "없음";
+  }).length;
+
+  if (!productId && !productName && filledNumericCount >= 3) {
+    return true;
+  }
+
+  return false;
+}
 
 
+async function inspectFile({ file, requiredCols, startMonth, endMonth, season }) {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const firstSheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[firstSheetName];
+
+  const sheetRows = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+  });
+
+  const headerRowIndex = findHeaderRowIndex(sheetRows);
+  console.log("선택된 헤더 행:", headerRowIndex + 1);
+  console.log("선택된 헤더:", sheetRows[headerRowIndex]);
+  
+
+  const headers = (sheetRows[headerRowIndex] || []).map((h, idx) => {
+    const header = String(h || "").trim();
+    return header || `__EMPTY_${idx}`;
+  });
+
+  const columnMap = buildColumnMap(headers, requiredCols);
+
+  const dataRows = sheetRows.slice(headerRowIndex + 1);
+
+  const originalRows = dataRows
+  .map((row, rowOffset) => ({
+    row,
+    excelRowIndex: headerRowIndex + rowOffset + 2,
+  }))
+  .filter(({ row }) =>
+    row.some((cell) => String(cell || "").trim() !== "")
+  )
+  .map(({ row, excelRowIndex }) => {
+    const obj = {};
+
+    headers.forEach((header, index) => {
+      obj[header] = row[index] ?? "";
+    });
+
+    obj.__rowIndex = excelRowIndex;
+
+    return obj;
+  });
+
+  const rawRows = originalRows
+  .map((row) => makeCanonicalRow(row, headers, columnMap, requiredCols))
+  .filter((row) => !isSummaryTotalRow(row));
+
+  const issues = [];
+
+  const missingColumns = requiredCols.filter((col) => {
+    if (col === "판매 사이트") return false;
+    if (col === "상품단가") return false;
+    return !columnMap[col];
+  });
+
+  missingColumns.forEach((col) => {
+    issues.push(
+      makeIssue({
+        type: "required_error",
+        rowIndex: "컬럼",
+        column: col,
+        originalValue: "없음",
+        cleanedValue: "없음",
+        message: `필수 컬럼 '${col}'을 찾을 수 없습니다. 컬럼명을 확인하거나 템플릿에 해당 컬럼을 추가해주세요.`,
+      })
+    );
+  });
+
+  if (!columnMap["판매 사이트"]) {
+    issues.push(
+      makeIssue({
+        type: "auto_cleaned",
+        rowIndex: "전체",
+        column: "판매 사이트",
+        originalValue: "컬럼 없음",
+        cleanedValue: "지그재그",
+        message: "원본 파일에 판매 사이트 컬럼이 없어 기본값 '지그재그'로 자동 보완했습니다.",
+      })
+    );
+  }
+
+  const mappedActualColumns = new Set(
+    Object.values(columnMap).filter(Boolean)
+  );
+
+  const referenceColumns = headers.filter((header) => {
+    return !mappedActualColumns.has(header);
+  });
+
+  referenceColumns.forEach((col) => {
+    issues.push(
+      makeIssue({
+        type: "reference",
+        rowIndex: "전체",
+        column: col,
+        originalValue: "-",
+        cleanedValue: "-",
+        message: "분석 필수 컬럼이 아니므로 참고용으로만 표시합니다.",
+      })
+    );
+  });
+
+  const cleanedRows = rawRows.map((row, idx) => {
+    const excelRowIndex = row.__rowIndex ?? headerRowIndex + idx + 2;
+    const cleanedRow = { ...row };
+  
+    cleanedRow.__rowIndex = excelRowIndex;
+
+    requiredCols.forEach((col) => {
+      if (col === "판매 사이트") return;
+      if (col === "상품단가") return;
+      if (!columnMap[col]) return;
+
+      const value = normalizeValue(row[col]);
+
+      if (value === "") {
+        issues.push(
+          makeIssue({
+            type: "required_error",
+            rowIndex: excelRowIndex,
+            column: col,
+            originalValue: "",
+            cleanedValue: "",
+            message: `필수 컬럼 '${col}'의 값이 비어 있습니다. 값을 입력한 뒤 다시 업로드해주세요.`,
+          })
+        );
+      }
+    });
+
+    NUMERIC_COLS.forEach((col) => {
+      if (!Object.prototype.hasOwnProperty.call(row, col)) return;
+
+      const result = cleanNumber(row[col]);
+
+      if (result.type === "auto_cleaned") {
+        cleanedRow[col] = result.cleanedValue;
+
+        issues.push(
+          makeIssue({
+            type: "auto_cleaned",
+            rowIndex: excelRowIndex,
+            column: col,
+            originalValue: result.value,
+            cleanedValue: result.cleanedValue,
+            message: result.message,
+          })
+        );
+      }
+
+      if (result.type === "need_check") {
+        issues.push(
+          makeIssue({
+            type: "need_check",
+            rowIndex: excelRowIndex,
+            column: col,
+            originalValue: result.value,
+            cleanedValue: result.cleanedValue,
+            message: result.message,
+          })
+        );
+      }
+    });
+
+    const exposure = getCleanNumber(cleanedRow, "노출수");
+    const click = getCleanNumber(cleanedRow, "클릭수");
+    const visit = getCleanNumber(cleanedRow, "상품 상세 방문수");
+    const wish = getCleanNumber(cleanedRow, "찜 유저수");
+    const cart = getCleanNumber(cleanedRow, "장바구니 유저수");
+    const orderCount = getCleanNumber(cleanedRow, "상품주문수");
+    const returnCount = getCleanNumber(cleanedRow, "반품건수");
+    const adCost = getCleanNumber(cleanedRow, "광고과금액");
+    const orderAmount = getCleanNumber(cleanedRow, "주문금액");
+
+    cleanedRow["분석 시작월"] = startMonth;
+    cleanedRow["분석 종료월"] = endMonth;
+    cleanedRow["분석 시즌"] = season;
+    cleanedRow["판매 사이트"] = cleanedRow["판매 사이트"] || "지그재그";
+
+    cleanedRow["클릭률"] = safeRate(click, exposure);
+    cleanedRow["찜 관심도"] = safeRate(wish, visit);
+    cleanedRow["장바구니 전환율"] = safeRate(cart, visit);
+    cleanedRow["구매전환율"] = safeRate(orderCount, visit);
+    cleanedRow["반품률"] = safeRate(returnCount, orderCount);
+    cleanedRow["ROAS"] = safeRate(orderAmount, adCost);
+
+    if (exposure === 0 && columnMap["노출수"]) {
+      issues.push(
+        makeIssue({
+          type: "need_check",
+          rowIndex: excelRowIndex,
+          column: "노출수",
+          originalValue: row["노출수"],
+          cleanedValue: exposure,
+          message: "노출수가 0이라 클릭률 계산이 제한됩니다.",
+        })
+      );
+    }
+
+    if (visit === 0 && columnMap["상품 상세 방문수"]) {
+      issues.push(
+        makeIssue({
+          type: "need_check",
+          rowIndex: excelRowIndex,
+          column: "상품 상세 방문수",
+          originalValue: row["상품 상세 방문수"],
+          cleanedValue: visit,
+          message: "상세 방문수가 0이라 찜/장바구니/구매전환율 계산이 제한됩니다.",
+        })
+      );
+    }
+
+    if (adCost === 0 && columnMap["광고과금액"]) {
+      issues.push(
+        makeIssue({
+          type: "need_check",
+          rowIndex: excelRowIndex,
+          column: "광고과금액",
+          originalValue: row["광고과금액"],
+          cleanedValue: adCost,
+          message: "광고과금액이 0이라 ROAS 계산이 제한됩니다.",
+        })
+      );
+    }
+
+    if (orderCount === 0 && columnMap["상품주문수"]) {
+      issues.push(
+        makeIssue({
+          type: "need_check",
+          rowIndex: excelRowIndex,
+          column: "상품주문수",
+          originalValue: row["상품주문수"],
+          cleanedValue: orderCount,
+          message: "주문수가 0이라 반품 안정성은 보수적으로 처리됩니다.",
+        })
+      );
+    }
+
+    return cleanedRow;
+  });
+
+  const autoCleanCount = issues.filter((i) => i.type === "auto_cleaned").length;
+  const needCheckCount = issues.filter((i) => i.type === "need_check").length;
+  const requiredErrorCount = issues.filter((i) => i.type === "required_error").length;
+  const referenceCount = issues.filter((i) => i.type === "reference").length;
+
+  const OUTPUT_COL_ORDER = [
+    "상품ID",
+    "상품명",
+    "노출수",
+    "클릭수",
+    "광고과금액",
+    "주문금액",
+    "상품 상세 방문수",
+    "찜 유저수",
+    "장바구니 유저수",
+    "상품주문수",
+    "반품건수",
+    "판매 사이트",
+    "분석 시작월",
+    "분석 종료월",
+    "분석 시즌",
+    "클릭률",
+    "찜 관심도",
+    "장바구니 전환율",
+    "구매전환율",
+    "반품률",
+    "ROAS",
+  ];
+  
+  const extraCols = Object.keys(cleanedRows[0] || {}).filter(
+    (col) => !OUTPUT_COL_ORDER.includes(col) && col !== "__rowIndex"
+  );
+  
+  const cleanedSheet = XLSX.utils.json_to_sheet(cleanedRows, {
+    header: [...OUTPUT_COL_ORDER, ...extraCols],
+  });
+  const cleanedWorkbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(cleanedWorkbook, cleanedSheet, "검수_정제결과");
+
+  const output = XLSX.write(cleanedWorkbook, {
+    bookType: "xlsx",
+    type: "array",
+  });
+
+  const blob = new Blob([output], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+
+  return {
+    fileName: file.name,
+    sheetName: firstSheetName,
+    headerRowIndex,
+    headers: [...OUTPUT_COL_ORDER, ...extraCols],
+    originalHeaders: headers,
+    rows: cleanedRows,
+    cleanedRows,
+    issues,
+    missingColumns,
+    referenceColumns,
+    columnMap,
+    autoCleanCount,
+    needCheckCount,
+    requiredErrorCount,
+    referenceCount,
+    canAnalyze: requiredErrorCount === 0,
+    cleanedFileUrl: URL.createObjectURL(blob),
+    cleanedFileName: `ActionFit_AI_검수완료_${new Date().toISOString().slice(0, 10)}.xlsx`,
+  };
+}
 
 export default function UploadScreen({ setScreen, }) {
     const [dragging, setDragging] = useState(false);
@@ -38,6 +871,7 @@ export default function UploadScreen({ setScreen, }) {
         setEndMonth("");
         setValidationStarted(false);
         setValidationReady(false);
+        setInspectionResult(null);
     }
     function handleTemplateDownload() {
         const link = document.createElement("a");
@@ -62,16 +896,33 @@ export default function UploadScreen({ setScreen, }) {
     const [showModal, setShowModal] = useState(false);
     const [validationStarted, setValidationStarted] = useState(false);
     const [validationReady, setValidationReady] = useState(false);
+    const [inspectionResult, setInspectionResult] = useState(null);
     const [cleanseOpen, setCleanseOpen] = useState(false);
     const [examplesOpen, setExamplesOpen] = useState(false);
-    function handleValidationStart() {
-        if (!selectedFile || !startMonth || !endMonth)
-            return;
-        setValidationStarted(true);
+    async function handleValidationStart() {
+      if (!selectedFile || !startMonth || !endMonth) return;
+    
+      setValidationStarted(true);
+      setValidationReady(false);
+      setInspectionResult(null);
+    
+      try {
+        const result = await inspectFile({
+          file: selectedFile,
+          requiredCols: REQUIRED_UPLOAD_COLS,
+          startMonth,
+          endMonth,
+          season,
+        });
+    
+        setInspectionResult(result);
+        setValidationReady(true);
+      } catch (error) {
+        console.error(error);
+        alert("파일 검수 중 오류가 발생했습니다. 파일 형식 또는 컬럼명을 확인해주세요.");
+        setValidationStarted(false);
         setValidationReady(false);
-        setTimeout(() => {
-            setValidationReady(true);
-        }, 800);
+      }
     }
     function handleStartMonthChange(value) {
         setStartMonth(value);
@@ -82,36 +933,53 @@ export default function UploadScreen({ setScreen, }) {
     const season = startMonth && endMonth ? getSeasonFromPeriod(startMonth, endMonth) : "";
     const canStartValidation = !!selectedFile && !!startMonth && !!endMonth && !(validationStarted && !validationReady);
     const fmt = (v) => v.replace("-", ".");
-    const hasWarn = true;
-    const hasError = false;
-    const SUMMARY_VALIDATION = [
-        {
-            label: "필수 컬럼 확인",
-            status: "정상",
-            desc: "모든 필수 컬럼이 확인되었습니다.",
-            ok: true,
-        },
-        {
-            label: "숫자형 데이터 자동 정제",
-            status: "완료",
-            desc: "18건이 자동으로 정제되었습니다. (쉼표·통화기호·단위 제거)",
-            ok: true,
-        },
-        {
-            label: "시즌/기간 정보 확인",
-            status: "정상",
-            desc: `분석 기간 ${fmt(startMonth)}~${fmt(endMonth)}, ${season} 시즌으로 분류되었습니다.`,
-            ok: true,
-        },
-        {
-            label: "확인 필요 항목",
-            status: "경고",
-            desc: "2건의 값은 의미 판단이 필요합니다. 검수 결과를 확인해주세요.",
-            ok: false,
-        },
-    ];
+    const hasWarn = inspectionResult ? inspectionResult.needCheckCount > 0 : false;
+    const hasError = inspectionResult ? inspectionResult.requiredErrorCount > 0 : false;
+    const SUMMARY_VALIDATION = inspectionResult
+  ? [
+      {
+        label: "필수 컬럼 확인",
+        status: inspectionResult.requiredErrorCount > 0 ? "오류" : "정상",
+        desc:
+          inspectionResult.requiredErrorCount > 0
+            ? `${inspectionResult.requiredErrorCount}건의 필수 컬럼 문제가 확인되었습니다.`
+            : "모든 필수 컬럼이 확인되었습니다.",
+        ok: inspectionResult.requiredErrorCount === 0,
+      },
+      {
+        label: "숫자형 데이터 자동 정제",
+        status: "완료",
+        desc:
+          inspectionResult.autoCleanCount > 0
+            ? `${inspectionResult.autoCleanCount}건의 값을 자동 정제했습니다.`
+            : "자동 정제가 필요한 값이 없습니다.",
+        ok: true,
+      },
+      {
+        label: "시즌/기간 정보 확인",
+        status: "정상",
+        desc: `분석 기간 ${fmt(startMonth)}~${fmt(endMonth)}, ${season} 시즌으로 분류되었습니다.`,
+        ok: true,
+      },
+      {
+        label: "확인 필요 항목",
+        status: inspectionResult.needCheckCount > 0 ? "경고" : "정상",
+        desc:
+          inspectionResult.needCheckCount > 0
+            ? `${inspectionResult.needCheckCount}건의 값은 의미 확인이 필요합니다.`
+            : "확인 필요 항목이 없습니다.",
+        ok: inspectionResult.needCheckCount === 0,
+      },
+    ]
+  : [];
     return (<>
-      {showModal && (<InspectionModal onClose={() => setShowModal(false)} setScreen={setScreen}/>)}
+      {showModal && inspectionResult && (
+  <InspectionModal
+    result={inspectionResult}
+    onClose={() => setShowModal(false)}
+    setScreen={setScreen}
+  />
+)}
 
       <div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-4">
         {/* Page heading */}
@@ -218,7 +1086,7 @@ export default function UploadScreen({ setScreen, }) {
                     {selectedFile.name}
                   </span>
                   <span className="text-xs bg-blue-100 text-blue-700 rounded font-mono px-2 py-0.5 ml-1">
-                    {selectedFile.name.split('.').pop()?.toLowerCase()}
+                    {selectedFile?.name ? selectedFile.name.split('.').pop().toLowerCase() : ""}
                   </span>
                 </p>
                 <p className="text-xs text-slate-600 mb-4">
@@ -249,6 +1117,7 @@ export default function UploadScreen({ setScreen, }) {
                 setEndMonth("");
                 setValidationStarted(false);
                 setValidationReady(false);
+                setInspectionResult(null);
                 if (fileInputRef.current) {
                     fileInputRef.current.value = "";
                 }
@@ -269,7 +1138,7 @@ export default function UploadScreen({ setScreen, }) {
               분석을 위해 다음 컬럼이 포함되어야 합니다.
             </p>
             <div className="flex flex-wrap gap-1.5 mb-3">
-              {AllData.REQUIRED_COLS.map((c) => (<span key={c} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-medium">
+            {REQUIRED_UPLOAD_COLS.map((c) => (<span key={c} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-lg font-medium">
                   {c}
                 </span>))}
             </div>
@@ -437,19 +1306,18 @@ export default function UploadScreen({ setScreen, }) {
               </p>
             </div>
             <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-              <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition" style={{
+            <button
+              onClick={() => setShowModal(true)}
+              disabled={!inspectionResult}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
                 color: "#2563EB",
                 backgroundColor: "#EFF6FF",
                 borderColor: "#BFDBFE",
-            }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor =
-                "#DBEAFE")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor =
-                "#EFF6FF")}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                검수 결과 확인
-              </button>
+              }}
+            >
+              검수 결과 확인
+            </button>
             </div>
           </div>
 
@@ -457,53 +1325,99 @@ export default function UploadScreen({ setScreen, }) {
           <div className="px-6 py-5">
             {/* Summary stat cards */}
             <div className="grid grid-cols-4 gap-3 mb-5">
-              {[
-                {
-                    label: "자동 정제 항목",
-                    value: "18건",
-                    sub: "형식 오류 자동 변환",
-                    color: "border-blue-200 bg-blue-50",
-                    textColor: "text-blue-700",
-                    subColor: "text-blue-500",
-                },
-                {
-                    label: "확인 필요 항목",
-                    value: "2건",
-                    sub: "의미 판단 필요",
-                    color: "border-amber-200",
-                    textColor: "text-amber-700",
-                    subColor: "text-amber-500",
-                    bgStyle: { backgroundColor: "#FFFBEB" },
-                },
-                {
-                    label: "필수 오류",
-                    value: "0건",
-                    sub: "분석 불가 오류 없음",
-                    color: "border-emerald-200 bg-emerald-50",
-                    textColor: "text-emerald-700",
-                    subColor: "text-emerald-500",
-                },
-                {
-                    label: "분석 가능 여부",
-                    value: "가능",
-                    sub: "검수 확인 후 시작 권장",
-                    color: "border-slate-200 bg-slate-50",
-                    textColor: "text-slate-700",
-                    subColor: "text-slate-400",
-                },
-            ].map((s) => (<div key={s.label} className={`rounded-xl border p-4 ${s.color}`} style={"bgStyle" in s ? s.bgStyle : undefined}>
-                  <p className="text-[11px] text-slate-500 font-semibold mb-1">
-                    {s.label}
-                  </p>
-                  <p className={`text-xl font-bold ${s.textColor} mb-0.5`}>
-                    {s.value}
-                  </p>
-                  <p className={`text-[10px] ${s.subColor}`}>
-                    {s.sub}
-                  </p>
-                </div>))}
+            {[
+              {
+                label: "자동 정제 항목",
+                value: `${inspectionResult?.autoCleanCount || 0}건`,
+                sub: "형식 오류 자동 변환",
+                color: "border-blue-200 bg-blue-50",
+                textColor: "text-blue-700",
+                subColor: "text-blue-500",
+              },
+              {
+                label: "확인 필요 항목",
+                value: `${inspectionResult?.needCheckCount || 0}건`,
+                sub: "의미 판단 필요",
+                color: "border-amber-200",
+                textColor: "text-amber-700",
+                subColor: "text-amber-500",
+                bgStyle: { backgroundColor: "#FFFBEB" },
+              },
+              {
+                label: "필수 오류",
+                value: `${inspectionResult?.requiredErrorCount || 0}건`,
+                sub: "분석 불가 오류",
+                color:
+                  inspectionResult?.requiredErrorCount > 0
+                    ? "border-rose-200 bg-rose-50"
+                    : "border-emerald-200 bg-emerald-50",
+                textColor:
+                  inspectionResult?.requiredErrorCount > 0
+                    ? "text-rose-700"
+                    : "text-emerald-700",
+                subColor:
+                  inspectionResult?.requiredErrorCount > 0
+                    ? "text-rose-500"
+                    : "text-emerald-500",
+              },
+              {
+                label: "분석 가능 여부",
+                value: inspectionResult?.canAnalyze ? "가능" : "불가능",
+                sub: inspectionResult?.canAnalyze
+                  ? inspectionResult?.needCheckCount > 0
+                    ? "확인 필요 항목 포함"
+                    : "분석 시작 가능"
+                  : "수정 후 재업로드 필요",
+                color: inspectionResult?.canAnalyze
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-slate-200 bg-slate-50",
+                textColor: inspectionResult?.canAnalyze ? "text-emerald-700" : "text-slate-700",
+                subColor: inspectionResult?.canAnalyze ? "text-emerald-500" : "text-slate-400",
+              },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className={`rounded-xl border p-4 ${s.color}`}
+                style={"bgStyle" in s ? s.bgStyle : undefined}
+              >
+                <p className="text-[11px] text-slate-500 font-semibold mb-1">
+                  {s.label}
+                </p>
+                <p className={`text-xl font-bold ${s.textColor} mb-0.5`}>
+                  {s.value}
+                </p>
+                <p className={`text-[10px] ${s.subColor}`}>
+                  {s.sub}
+                </p>
+              </div>
+            ))}
             </div>
+            
+            {inspectionResult?.issues?.filter((i) => i.type === "required_error").length > 0 && (
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+                <p className="text-xs font-bold text-rose-700 mb-2">
+                  필수 오류 상세
+                </p>
 
+                <div className="space-y-1.5">
+                  {inspectionResult.issues
+                    .filter((i) => i.type === "required_error")
+                    .slice(0, 10)
+                    .map((issue) => (
+                      <div key={issue.id} className="text-[11px] text-rose-700 leading-relaxed">
+                        • {issue.rowIndex} · {issue.column}: {issue.message}
+                      </div>
+                    ))}
+                </div>
+
+                {inspectionResult.issues.filter((i) => i.type === "required_error").length > 10 && (
+                  <p className="text-[11px] text-rose-500 mt-2">
+                    외 {inspectionResult.issues.filter((i) => i.type === "required_error").length - 10}건은 검수 결과 모달에서 확인할 수 있습니다.
+                  </p>
+                )}
+              </div>
+            )}
+            
             {/* Collapsible: ActionFit AI 자동 정제 방식 */}
             <div className="rounded-xl border border-blue-100 overflow-hidden mb-4">
               <button onClick={() => setCleanseOpen(!cleanseOpen)} className="w-full flex items-center justify-between px-4 py-3 text-left transition hover:bg-blue-50/60" style={{ backgroundColor: "#EFF6FF" }}>
@@ -662,10 +1576,10 @@ export default function UploadScreen({ setScreen, }) {
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>)}
                 <p className={`text-xs font-medium ${hasError ? "text-rose-700" : "text-slate-600"}`} style={hasWarn && !hasError ? { color: "#B45309" } : {}}>
-                  {hasError
-                ? "필수 컬럼 누락 또는 숫자 변환이 불가능한 값이 있어 분석을 시작할 수 없습니다."
-                : hasWarn
-                    ? "일부 값은 확인이 필요합니다. 검수 결과를 확인한 뒤 분석을 진행할 수 있습니다."
+                {hasError
+                  ? "필수 컬럼 누락 또는 필수값 문제가 있어 분석을 시작할 수 없습니다. 파일을 수정한 뒤 다시 업로드해주세요."
+                  : hasWarn
+                    ? "확인 필요 항목이 있지만 필수 오류는 없어 분석을 진행할 수 있습니다. 단, 일부 지표는 보수적으로 계산될 수 있습니다."
                     : "자동 정제된 값은 분석에 반영됩니다. 지금 바로 분석을 시작할 수 있습니다."}
                 </p>
               </div>
@@ -684,4 +1598,384 @@ export default function UploadScreen({ setScreen, }) {
         </div>
       </div>
     </>);
+}
+
+function InspectionModal({ result, onClose, setScreen }) {
+  const [filter, setFilter] = useState("전체");
+  const [page, setPage] = useState(1);
+  const [selectedIssue, setSelectedIssue] = useState(result.issues[0] || null);
+
+  const pageSize = 20;
+const totalPages = Math.max(1, Math.ceil(result.rows.length / pageSize));
+const pageRows = result.rows.slice((page - 1) * pageSize, page * pageSize);
+
+function getIssueRowNumber(issue) {
+  const n = Number(issue?.rowIndex);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getPageByExcelRow(rowNumber) {
+  const targetIndex = result.rows.findIndex(
+    (row) => Number(row.__rowIndex) === Number(rowNumber)
+  );
+
+  if (targetIndex === -1) return 1;
+
+  return Math.floor(targetIndex / pageSize) + 1;
+}
+
+function handleSelectIssue(issue) {
+  setSelectedIssue(issue);
+
+  const rowNumber = getIssueRowNumber(issue);
+
+  if (rowNumber) {
+    const nextPage = getPageByExcelRow(rowNumber);
+    setPage(nextPage);
+  }
+}
+
+  const filteredIssues = result.issues.filter((issue) => {
+    if (filter === "전체") return true;
+    if (filter === "자동 정제") return issue.type === "auto_cleaned";
+    if (filter === "확인 필요") return issue.type === "need_check";
+    if (filter === "필수 오류") return issue.type === "required_error";
+    if (filter === "참고") return issue.type === "reference";
+    return true;
+  });
+
+  const issueCounts = {
+    전체: result.issues.length,
+    "자동 정제": result.issues.filter((i) => i.type === "auto_cleaned").length,
+    "확인 필요": result.issues.filter((i) => i.type === "need_check").length,
+    "필수 오류": result.issues.filter((i) => i.type === "required_error").length,
+    참고: result.issues.filter((i) => i.type === "reference").length,
+  };
+
+  function getCellIssue(rowIndex, column) {
+    return result.issues.find(
+      (issue) => issue.rowIndex === rowIndex && issue.column === column
+    );
+  }
+
+  function isReferenceColumn(column) {
+    return result.referenceColumns.includes(column);
+  }
+
+  function issueClass(issue, column) {
+    if (isReferenceColumn(column)) return "bg-slate-100 text-slate-400";
+    if (!issue) return "";
+
+    if (issue.type === "auto_cleaned") {
+      return "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
+    }
+
+    if (issue.type === "need_check") {
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+    }
+
+    if (issue.type === "required_error") {
+      return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+    }
+
+    return "";
+  }
+
+  const canAnalyze = result.canAnalyze;
+
+  const visibleHeaders = result.headers.filter(
+    (header) => header !== "__rowIndex"
+  );
+  
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-3">
+      <div className="bg-white w-full max-w-[96vw] h-[94vh] rounded-2xl shadow-xl overflow-hidden flex flex-col">
+        <div className="flex items-start justify-between px-6 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-bold text-slate-800">
+              데이터 자동 정제 및 검수 결과
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              {result.fileName} · {result.rows.length}행 · {result.headers.length}개 컬럼
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="flex-1 grid grid-cols-[1.45fr_0.8fr] min-h-0">
+          <div className="min-w-0 min-h-0 border-r border-slate-100 flex flex-col">
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+              {["전체", "자동 정제", "확인 필요", "필수 오류", "참고"].map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => {
+                    setFilter(item);
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                    filter === item
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {item}
+                  <span className="ml-1 text-[10px] opacity-80">
+                    {issueCounts[item] ?? 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold border-b border-slate-100">
+                      행
+                    </th>
+                    {visibleHeaders.map((header) => (
+                      <th
+                        key={header}
+                        className={`px-3 py-2 text-left font-semibold border-b border-slate-100 whitespace-nowrap ${
+                          isReferenceColumn(header) ? "bg-slate-100 text-slate-400" : ""
+                        }`}
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+
+                <tbody>
+                {pageRows.map((row, idx) => {
+                  const realRowIndex = row.__rowIndex ?? ((page - 1) * pageSize + idx + 2);
+
+                  return (
+                    <tr key={realRowIndex} className="border-b border-slate-50">
+                        <td className="px-3 py-2 text-slate-400 bg-slate-50 sticky left-0">
+                          {realRowIndex}
+                        </td>
+
+                        {visibleHeaders.map((header) => {
+                          const issue = getCellIssue(realRowIndex, header);
+                          const reference = isReferenceColumn(header);
+
+                          return (
+                            <td
+                              key={header}
+                              onClick={() => {
+                                if (issue) handleSelectIssue(issue);
+                                if (!issue && reference) {
+                                  setSelectedIssue(
+                                    result.issues.find(
+                                      (i) => i.type === "reference" && i.column === header
+                                    )
+                                  );
+                                }
+                              }}
+                              className={`px-3 py-2 whitespace-nowrap cursor-pointer ${issueClass(
+                                issue,
+                                header
+                              )}`}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span>{String(row[header] ?? "")}</span>
+
+                                {issue?.type === "auto_cleaned" && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">
+                                    정제
+                                  </span>
+                                )}
+
+                                {issue?.type === "need_check" && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold">
+                                    확인
+                                  </span>
+                                )}
+
+                                {reference && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-500 font-bold">
+                                    참고
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
+              <p className="text-xs text-slate-400">
+                {(page - 1) * pageSize + 1}-
+                {Math.min(page * pageSize, result.rows.length)} / {result.rows.length}행
+              </p>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-500 disabled:opacity-40"
+                >
+                  이전
+                </button>
+
+                <span className="px-3 py-1.5 text-xs text-slate-500">
+                  {page} / {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  disabled={page === totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-500 disabled:opacity-40"
+                >
+                  다음
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="min-w-0 flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <p className="text-xs font-bold text-slate-700 mb-3">
+                검수 항목 ({filteredIssues.length}건)
+              </p>
+
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {filteredIssues.length === 0 ? (
+                  <p className="text-xs text-slate-400">
+                    해당 항목이 없습니다.
+                  </p>
+                ) : (
+                  filteredIssues.map((issue) => (
+                    <button
+                      key={issue.id}
+                      type="button"
+                      onClick={() => handleSelectIssue(issue)}
+                      className={`w-full text-left rounded-lg border px-3 py-2 transition ${
+                        selectedIssue?.id === issue.id
+                          ? "border-blue-300 bg-blue-50"
+                          : "border-slate-100 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                            issue.type === "auto_cleaned"
+                              ? "bg-blue-100 text-blue-700"
+                              : issue.type === "need_check"
+                              ? "bg-amber-100 text-amber-700"
+                              : issue.type === "required_error"
+                              ? "bg-rose-100 text-rose-700"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {typeLabel(issue.type)}
+                        </span>
+
+                        <span className="text-[11px] text-slate-400">
+                          {issue.rowIndex}행 · {issue.column}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-600 mt-1 line-clamp-2">
+                        {issue.message}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 px-5 py-4 overflow-y-auto">
+              <p className="text-xs font-bold text-slate-700 mb-3">
+                상세 정보
+              </p>
+
+              {selectedIssue ? (
+                <div className="rounded-xl border border-slate-100 overflow-hidden">
+                  {[
+                    ["위치", `${selectedIssue.rowIndex}행 · ${selectedIssue.column}`],
+                    ["원본 값", String(selectedIssue.originalValue ?? "")],
+                    ["처리 결과", String(selectedIssue.cleanedValue ?? "")],
+                    ["처리 유형", typeLabel(selectedIssue.type)],
+                    ["처리 설명", selectedIssue.message],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="grid grid-cols-[100px_1fr] border-b border-slate-100 last:border-b-0"
+                    >
+                      <div className="bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">
+                        {label}
+                      </div>
+                      <div className="px-3 py-3 text-xs text-slate-700">
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  왼쪽 셀 또는 검수 항목을 선택하면 상세 정보가 표시됩니다.
+                </p>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t border-slate-100 bg-white sticky bottom-0 z-20">
+              <div className="flex items-center justify-between gap-3">
+                <a
+                  href={result.cleanedFileUrl}
+                  download={result.cleanedFileName}
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  정제 파일 다운로드
+                </a>
+
+                <button
+                  type="button"
+                  disabled={!canAnalyze}
+                  onClick={() => setScreen("results")}
+                  className={`px-5 py-2 rounded-lg text-xs font-bold transition ${
+                    canAnalyze
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  }`}
+                >
+                  분석 시작
+                </button>
+              </div>
+
+              {!canAnalyze && (
+                <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mt-3">
+                  필수 오류가 있어 분석을 시작할 수 없습니다.
+                  필수 컬럼 또는 필수값을 수정한 뒤 다시 업로드해주세요.
+                </p>
+              )}
+
+              {canAnalyze && result.needCheckCount > 0 && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+                  확인 필요 항목이 있지만 필수 오류는 없어 분석을 진행할 수 있습니다.
+                  단, 확인 필요 값은 보수적으로 계산되거나 일부 지표 계산이 제한될 수 있습니다.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

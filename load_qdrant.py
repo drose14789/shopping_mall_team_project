@@ -8,7 +8,7 @@ from pathlib import Path
 
 # 사용자 설정
 INPUT_FILE = Path(
-    r"C:\yolo\llm\data\embeddings\documents.children.embeddings.jsonl"
+    r"C:\Users\M\Desktop\shopping_mall_team_project\data\embeddings\documents.children.embeddings.jsonl"
 )
 QDRANT_URL = "http://localhost:6333"
 COLLECTION_NAME = "legal_chunks"

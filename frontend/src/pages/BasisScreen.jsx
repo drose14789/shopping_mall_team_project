@@ -253,12 +253,13 @@ export default function BasisScreen({ setScreen }) {
           <div className="flex flex-wrap gap-1.5 pt-5 mb-4">
             {[
               "상품ID",
+              
               "상품명",
               "노출수",
               "클릭수",
-              "광고비",
+              "광고과금액",
               "주문금액",
-              "상품금액",
+              "상품단가",
               "상품 상세 방문수",
               "장바구니 유저수",
               "찜 유저수",
