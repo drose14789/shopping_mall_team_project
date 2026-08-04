@@ -1,10 +1,75 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { REQUIRED_COLS, TABLE_DATA } from '../constants/data';
-import { seasonBadgeStyle, actionBadge} from '../utils/helpers'; 
+import { seasonBadgeStyle, actionBadge, getClientUuid} from '../utils/helpers'; 
 import { DashboardIllustration } from '../components/common/Icons'; 
 import { InspectionModal } from '../components/InspectionModal'; 
 
 export default function MainScreen({ setScreen, }) {
+  const [historyData, setHistoryData] = useState([]);
+  const [summaryData, setSummaryData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const summaryItems = summaryData.map(
+    (item, index) => ({
+        label: item.product_type,
+        count: item.count + "개",
+        dot: [
+            "bg-amber-500",
+            "bg-blue-500",
+            "bg-rose-400",
+            "bg-red-500"
+        ][index]
+    })
+);
+
+    useEffect(() => {
+      const client_uuid = getClientUuid();
+      fetch(
+          `http://localhost:8000/score/history/${client_uuid}`
+      )
+      .then(res => res.json())
+      .then(data => {
+          console.log("분석 이력 데이터:", data);
+          setHistoryData(
+              Array.isArray(data)
+              ? data
+              : []
+          );
+          setLoading(false);
+      })
+      .catch(err => {
+          console.error(
+              "이력 데이터 조회 실패",
+              err
+          );
+          setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    const client_uuid = getClientUuid();
+      fetch(
+          `http://localhost:8000/score/history/summary/${client_uuid}`
+      )
+      .then(res => res.json())
+      .then(data => {
+          console.log(
+              "분석 유형 통계:",
+              data
+          );
+          setSummaryData(
+              Array.isArray(data)
+              ? data
+              : []
+          );
+      })
+      .catch(err => {
+          console.error(
+              "통계 조회 실패",
+              err
+          );
+      });
+
+  }, []);
     return (<div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-5">
       {/* Hero */}
       <div className="rounded-2xl p-7 flex items-center justify-between overflow-hidden relative" style={{
@@ -218,45 +283,29 @@ export default function MainScreen({ setScreen, }) {
           </p>
         </div>
           <div className="space-y-3">
-          {[
-            {
-                label: "상세페이지 개선형",
-                count: "42개",
-                pct: "상세 정보 보강",
-                dot: "bg-amber-500",
-            },
-            {
-                label: "핵심 확대형",
-                count: "32개",
-                pct: "광고 예산 확대",
-                dot: "bg-blue-500",
-            },
-            {
-                label: "광고 축소형",
-                count: "21개",
-                pct: "광고비 축소·보류",
-                dot: "bg-rose-400",
-            },
-            {
-                label: "반품 리스크형",
-                count: "18개",
-                pct: "반품 원인 점검",
-                dot: "bg-red-500",
-            }
-        ].map((item) => (<div key={item.label} className="flex items-center gap-3">
+          {summaryItems.map((item) => (
+            <div key={item.label} className="flex items-center gap-3">
+
                 <div className={`w-2 h-2 rounded-full ${item.dot} flex-shrink-0`}/>
+
                 <p className="flex-1 text-xs text-slate-500 truncate">
-                  {item.label}
+                    {item.label}
                 </p>
+
                 <div className="text-right">
-                  <p className="text-sm font-bold text-slate-800">
-                    {item.count}
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    {item.pct}
-                  </p>
+
+                    <p className="text-sm font-bold text-slate-800">
+                        {item.count}
+                    </p>
+
+                    <p className="text-[10px] text-slate-400">
+                        {item.pct}
+                    </p>
+
                 </div>
-              </div>))}
+
+            </div>
+        ))}
           </div>
         </div>
         <div className="flex-1 bg-white rounded-xl border border-slate-100 overflow-hidden">
@@ -282,11 +331,11 @@ export default function MainScreen({ setScreen, }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-            {TABLE_DATA.map((row) => {
-            const seasonStyle = seasonBadgeStyle(row.season);
-            return (<tr key={row.file} className="hover:bg-slate-50/70 transition-colors">
+            {historyData.map((row,index) => {
+            const seasonStyle = seasonBadgeStyle(row.quarter);
+            return (<tr key={index} className="hover:bg-slate-50/70 transition-colors">
                     <td className="px-5 py-3 text-xs font-medium text-slate-700 whitespace-nowrap">
-                      {row.date}
+                      {new Date(row.created_at).toLocaleDateString()}
                     </td>
 
                     <td className="px-5 py-3">
@@ -298,19 +347,21 @@ export default function MainScreen({ setScreen, }) {
                           </svg>
                         </div>
                         <span className="text-xs text-slate-600 font-medium whitespace-nowrap">
-                          {row.file}
+                          {row.file_name}
                         </span>
                       </div>
                     </td>
 
                     <td className="px-5 py-3 text-xs text-slate-500 whitespace-nowrap">
-                      {row.period}
+                      {row.analysis_start_time}
+                      ~
+                      {row.analysis_end_time}
                     </td>
 
                     <td className="px-5 py-3">
                       <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border font-semibold whitespace-nowrap ${seasonStyle.className}`}>
                         <span>{seasonStyle.emoji}</span>
-                        {row.season}
+                        {row.quarter}
                       </span>
                     </td>
                   </tr>);

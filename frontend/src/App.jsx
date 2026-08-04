@@ -15,8 +15,10 @@ import DiagScreen from './pages/DiagScreen';
 import ChatScreen from './pages/ChatScreen';
 import BasisScreen from './pages/BasisScreen';
 
+
 export default function App() {
     const [screen, setScreen] = useState("main");
+    const [selectedFile, setSelectedFile] = useState(null);
     return (<div className="flex h-screen w-screen bg-slate-50 overflow-hidden" style={{
             fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif",
         }}>
@@ -39,7 +41,15 @@ export default function App() {
                                     : screen === "basis"
                                         ? "진단 기준"
                                         : undefined}/>
-        {screen === "main" ? (<MainScreen setScreen={setScreen}/>) : screen === "upload" ? (<UploadScreen setScreen={setScreen}/>) : screen === "results" ? (<ResultsScreen setScreen={setScreen}/>) : screen === "detail" ? (<DetailScreen setScreen={setScreen}/>) : screen === "history" ? (<HistoryScreen setScreen={setScreen}/>) : screen === "today" ? (<TodayScreen setScreen={setScreen}/>) : screen === "diag" ? (<DiagScreen setScreen={setScreen}/>) : screen === "chat" ? (<ChatScreen setScreen={setScreen}/>) : screen === "basis" ? (<BasisScreen setScreen={setScreen}/>) : null}
+        {screen === "main" ? (<MainScreen setScreen={setScreen}/>) : screen === "upload" ? 
+        (<UploadScreen setScreen={setScreen} setSelectedFile={setSelectedFile} selectedFile={selectedFile}/>) : screen === "results" ? 
+        (<ResultsScreen setScreen={setScreen} selectedFile={selectedFile}/>) : screen === "detail" ? 
+        (<DetailScreen setScreen={setScreen}/>) : screen === "history" ? 
+        (<HistoryScreen setScreen={setScreen} setSelectedFile={setSelectedFile}/>) : screen === "today" ? 
+        (<TodayScreen setScreen={setScreen}/>) : screen === "diag" ? 
+        (<DiagScreen setScreen={setScreen}/>) : screen === "chat" ? 
+        (<ChatScreen setScreen={setScreen}/>) : screen === "basis" ? 
+        (<BasisScreen setScreen={setScreen}/>) : null}
       </div>
     </div>);
 }

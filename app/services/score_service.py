@@ -5,6 +5,17 @@ from sqlalchemy import text
 import os
 import scripts.db_setting as db
 from datetime import datetime
+import math
+
+def clean_nans(data):
+    if isinstance(data, float):
+        if math.isnan(data) or math.isinf(data):
+            return None # 혹은 0으로 처리하고 싶다면 0
+    elif isinstance(data, dict):
+        return {k: clean_nans(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [clean_nans(v) for v in data]
+    return data
 
 
 def validate_and_read_excel(user_excel_path):
@@ -27,6 +38,7 @@ def validate_and_read_excel(user_excel_path):
         '광고과금액',
         '주문금액',
         '상품단가',
+        '상품ID',
     ]
 
     missing_columns = [col for col in required_columns if col not in user_df.columns]
@@ -75,54 +87,80 @@ def classify_product_type(click_score, cart_score, conv_score, return_score):
 
 
 def ensure_evaluation_table_exists(engine):
-  """evaluation_results 테이블이 없으면 자동으로 생성 (client_uuid 및 분석 시간 포함)"""
-  create_table_query = text("""
-                            CREATE TABLE IF NOT EXISTS evaluation_results (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        client_uuid VARCHAR(100),
-        product_name VARCHAR(255),
-        product_id VARCHAR(100),
-        category VARCHAR(100),
-        quarter VARCHAR(50),
-        exposure_count INT,
-        click_count INT,
-        visit_count INT,
-        wish_user_count INT,
-        cart_user_count INT,
-        order_count INT,
-        return_count INT,
-        ad_spend FLOAT,
-        order_amount FLOAT,
-        unit_price FLOAT,
-        calc_click_rate FLOAT,
-        calc_wish_conv FLOAT,
-        calc_cart_conv FLOAT,
-        calc_conv_rate FLOAT,
-        calc_return_stability FLOAT,
-        calc_roas FLOAT,
-        score_click_rate FLOAT,
-        score_wish_conv FLOAT,
-        score_cart_conv FLOAT,
-        score_conv_rate FLOAT,
-        score_return_stability FLOAT,
-        score_roas FLOAT,
-        weight_click_rate FLOAT,
-        weight_wish_conv FLOAT,
-        weight_cart_conv FLOAT,
-        weight_conv_rate FLOAT,
-        weight_return_stability FLOAT,
-        weight_roas FLOAT,
-        total_score FLOAT,
-        recommended_ad_spend FLOAT,
-        product_type VARCHAR(100),
-        created_at DATETIME
-    )
-  """)
-  with engine.begin() as conn:
-    conn.execute(create_table_query)
+    """evaluation_results 테이블이 없으면 자동으로 생성"""
+    create_table_query = text("""
+        CREATE TABLE IF NOT EXISTS evaluation_results (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+
+            -- 분석 사용자/파일 정보
+            client_uuid VARCHAR(100),
+            file_name VARCHAR(255),
+
+            -- 상품 기본 정보
+            product_name VARCHAR(255),
+            product_id VARCHAR(100),
+            category VARCHAR(100),
+            quarter VARCHAR(50),
+
+            -- 원본 성과 데이터
+            exposure_count INT,
+            click_count INT,
+            visit_count INT,
+            wish_user_count INT,
+            cart_user_count INT,
+            order_count INT,
+            return_count INT,
+
+            ad_spend FLOAT,
+            order_amount FLOAT,
+            unit_price FLOAT,
+
+            -- 계산 지표
+            calc_click_rate FLOAT,
+            calc_wish_conv FLOAT,
+            calc_cart_conv FLOAT,
+            calc_conv_rate FLOAT,
+            calc_return_stability FLOAT,
+            calc_roas FLOAT,
+
+            -- 백분위 점수
+            score_click_rate FLOAT,
+            score_wish_conv FLOAT,
+            score_cart_conv FLOAT,
+            score_conv_rate FLOAT,
+            score_return_stability FLOAT,
+            score_roas FLOAT,
+
+            -- 가중치
+            weight_click_rate FLOAT,
+            weight_wish_conv FLOAT,
+            weight_cart_conv FLOAT,
+            weight_conv_rate FLOAT,
+            weight_return_stability FLOAT,
+            weight_roas FLOAT,
+
+            -- 최종 결과
+            total_score FLOAT,
+            recommended_ad_spend FLOAT,
+            product_type VARCHAR(100),
+
+            -- 분석 시간
+            analysis_start_time VARCHAR(20),
+            analysis_end_time VARCHAR(20),
+            created_at DATETIME
+        )
+    """)
+
+    with engine.begin() as conn:
+        conn.execute(create_table_query)
 
 
-def evaluate_single_excel_file(user_excel_path, engine, client_uuid: str = "default_user"):
+def evaluate_single_excel_file(
+    user_excel_path,
+    engine,
+    client_uuid: str = "default_user",
+    file_name: str = None
+):
     """단일 엑셀 파일을 읽어 기존 평가를 수행하고 client_uuid와 분석 시간을 함께 저장"""
     # 테이블 존재 여부 확인 및 생성 (uuid 컬럼 포함)
     ensure_evaluation_table_exists(engine)
@@ -154,8 +192,9 @@ def evaluate_single_excel_file(user_excel_path, engine, client_uuid: str = "defa
         )
         category_name = validated_row.category
         quarter_val = validated_row.quarter
-        product_id = str(row.get('상품 ID', ''))
-
+        product_id = str(row.get('상품ID', ''))
+        analysis_start_time_val = row["분석 시작월"]
+        analysis_end_time_val = row["분석 종료월"]
         exposure = float(validated_row.exposure)
         click = float(validated_row.click)
         visit = float(validated_row.visit)
@@ -388,6 +427,7 @@ def evaluate_single_excel_file(user_excel_path, engine, client_uuid: str = "defa
 
         result_data = {
             'client_uuid': [client_uuid],  # 👈 전달받은 client_uuid 추가
+            'file_name' : [file_name],
             'product_name': [product_name_val],
             'product_id': [product_id],
             'category': [category_name],
@@ -423,6 +463,8 @@ def evaluate_single_excel_file(user_excel_path, engine, client_uuid: str = "defa
             'total_score': [total_score],
             'recommended_ad_spend': [recommended_ad_spend],
             'product_type': [product_type],
+            'analysis_start_time': [analysis_start_time_val],  # 👈 분석 시작 시간 컬럼 추가
+            'analysis_end_time': [analysis_end_time_val],  # 👈 분석 종료 시간 컬럼 추가
             'created_at': [analysis_time],  # 👈 시간순 정렬을 위한 분석 시간 추가
         }
 
@@ -447,7 +489,7 @@ def evaluate_single_excel_file(user_excel_path, engine, client_uuid: str = "defa
             'product_type': product_type,
         })
 
-    return file_results
+    return clean_nans(file_results)
 
 
 if __name__ == "__main__":

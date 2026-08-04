@@ -1,5 +1,18 @@
 import { SEASON_BY_MONTH } from '../constants/data'; 
 
+
+export function getClientUuid(){
+
+    let uuid = localStorage.getItem("client_uuid");
+
+    if(!uuid){
+        uuid = crypto.randomUUID();
+        localStorage.setItem("client_uuid", uuid);
+    }
+
+    return uuid;
+}
+
 export function getSeasonFromPeriod(start, end) {
     const months = getMonthsBetween(start, end);
     const counts = {

@@ -303,8 +303,167 @@ export function InspectionModal({ onClose, setScreen }) {
     </div>);
 }
 
-export function ProductDetailModal({ product, onClose, setScreen, }) {
-    const d = getDetailData(product);
+export function ProductDetailModal({ product, onClose, setScreen }) {
+
+    const d = {
+        score: product.total_score,
+
+        diagnosisType: product.product_type,
+
+        actionSummary:
+            `${product.product_type} 상품으로 분석되었습니다.`,
+
+        recommendedAdBudget:
+            `${Math.round(product.recommended_ad_spend).toLocaleString()}원`,
+
+        scoreBars: [
+            {
+                label: "상품클릭률",
+                score: product.score_click_rate
+            },
+            {
+                label: "찜전환율",
+                score: product.score_wish_conv
+            },
+            {
+                label: "장바구니전환율",
+                score: product.score_cart_conv
+            },
+            {
+                label: "구매전환율",
+                score: product.score_conv_rate
+            },
+            {
+                label: "반품 안정성",
+                score: product.score_return_stability
+            },
+            {
+                label: "ROAS",
+                score: product.score_roas
+            }
+        ],
+
+        basicRawData: [
+            {
+                label: "상품명",
+                value: product.product_name
+            },
+            {
+                label: "카테고리",
+                value: product.category
+            },
+            {
+                label: "분기",
+                value: product.quarter
+            },
+            {
+                label: "상품ID",
+                value: product.product_id
+            }
+        ],
+
+        performanceRawData: [
+            {
+                label: "노출수",
+                value: product.exposure_count?.toLocaleString()
+            },
+            {
+                label: "클릭수",
+                value: product.click_count?.toLocaleString()
+            },
+            {
+                label: "상품 상세 방문",
+                value: product.visit_count?.toLocaleString()
+            },
+            {
+                label: "찜 유저수",
+                value: product.wish_user_count?.toLocaleString()
+            },
+            {
+                label: "장바구니 유저수",
+                value: product.cart_user_count?.toLocaleString()
+            },
+            {
+                label: "주문수",
+                value: product.order_count?.toLocaleString()
+            },
+            {
+                label: "반품수",
+                value: product.return_count?.toLocaleString()
+            },
+            {
+                label: "광고비",
+                value: `${product.ad_spend?.toLocaleString()}원`
+            },
+            {
+                label: "주문금액",
+                value: `${product.order_amount?.toLocaleString()}원`
+            },
+            {
+                label: "상품단가",
+                value: `${product.unit_price?.toLocaleString()}원`
+            }
+        ],
+
+        coachingFeedback: [
+            {
+                label: "상품클릭률",
+                status: product.score_click_rate >= 70 ? "veryGood" : "weak",
+                text:
+                    `상품 클릭률 ${product.calc_click_rate}% 기준으로 광고 유입 반응을 분석했습니다.`
+            },
+            {
+                label: "찜전환율",
+                status: product.score_wish_conv >= 70 ? "good" : "weak",
+                text:
+                    `찜 전환율 ${product.calc_wish_conv}% 입니다.`
+            },
+            {
+                label: "장바구니전환율",
+                status: product.score_cart_conv >= 70 ? "good" : "weak",
+                text:
+                    `장바구니 전환율 ${product.calc_cart_conv}% 입니다.`
+            },
+            {
+                label: "구매전환율",
+                status: product.score_conv_rate >= 70 ? "good" : "weak",
+                text:
+                    `구매 전환율 ${product.calc_conv_rate}% 입니다.`
+            },
+            {
+                label: "반품안정성",
+                status: product.score_return_stability >= 70 ? "good" : "weak",
+                text:
+                    `반품 안정성 ${product.calc_return_stability}% 입니다.`
+            },
+            {
+                label: "ROAS",
+                status: product.score_roas >= 70 ? "veryGood" : "weak",
+                text:
+                    `ROAS ${product.calc_roas}% 기준 광고 효율을 분석했습니다.`
+            }
+        ],
+
+        bottleneckCauses: [
+            `${product.product_type} 진단 결과를 기반으로 주요 개선 포인트를 확인했습니다.`,
+            `ROAS ${product.calc_roas}%와 구매 전환 데이터를 기준으로 광고 운영 방향을 판단했습니다.`
+        ],
+
+        actionItems: [
+            {
+                tag: "예산 테스트",
+                text:
+                    "현재 광고 효율을 기준으로 단계적인 광고 예산 확대를 검토합니다."
+            },
+            {
+                tag: "전환 점검",
+                text:
+                    "구매 전환 및 반품 데이터를 지속적으로 확인합니다."
+            }
+        ]
+    };
+
+
     const bottleneckCauses = d.bottleneckCauses;
     const actionItems = d.actionItems;
     const scoreColor = d.score >= 80

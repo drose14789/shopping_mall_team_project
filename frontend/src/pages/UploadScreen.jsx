@@ -1,7 +1,8 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {UploadIllustration} from '../components/common/Icons'; 
 import * as AllData from '../constants/data';
 import * as XLSX from "xlsx";
+import { getClientUuid } from "../utils/helpers";
 
 const SEASON_EMOJI = {
   겨울: "❄️",
@@ -695,7 +696,7 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
     const visit = getCleanNumber(cleanedRow, "상품 상세 방문수");
     const wish = getCleanNumber(cleanedRow, "찜 유저수");
     const cart = getCleanNumber(cleanedRow, "장바구니 유저수");
-    const orderCount = getCleanNumber(cleanedRow, "상품주문수");
+    const orderCount = getCleanNumber(cleanedRow, "상품주문수");  
     const returnCount = getCleanNumber(cleanedRow, "반품건수");
     const adCost = getCleanNumber(cleanedRow, "광고과금액");
     const orderAmount = getCleanNumber(cleanedRow, "주문금액");
@@ -833,13 +834,13 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
     referenceCount,
     canAnalyze: requiredErrorCount === 0,
     cleanedFileUrl: URL.createObjectURL(blob),
-    cleanedFileName: `ActionFit_AI_검수완료_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    cleanedFileName:
+    `${file.name.replace(/\.(xlsx|csv)$/i, "")}_분석완료_${new Date().toISOString().slice(0, 10)}.xlsx`,
   };
 }
 
-export default function UploadScreen({ setScreen, }) {
+export default function UploadScreen({ result, setScreen, selectedFile, setSelectedFile }) {
     const [dragging, setDragging] = useState(false);
-    const [selectedFile, setSelectedFile] = useState(null);
     const [uploadedAt, setUploadedAt] = useState("");
     const fileInputRef = useRef(null);
     const MAX_FILE_SIZE_MB = 50;
@@ -978,6 +979,7 @@ export default function UploadScreen({ setScreen, }) {
     result={inspectionResult}
     onClose={() => setShowModal(false)}
     setScreen={setScreen}
+    setSelectedFile={setSelectedFile}
   />
 )}
 
@@ -1600,7 +1602,62 @@ export default function UploadScreen({ setScreen, }) {
     </>);
 }
 
-function InspectionModal({ result, onClose, setScreen }) {
+function InspectionModal({ result, onClose, setScreen, setSelectedFile }) {
+      // 컴포넌트 내부
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const clientUuid = getClientUuid();
+    // 분석 시작 버튼 클릭 핸들러
+    const handleAnalyze = async () => {
+      if (!canAnalyze || !result?.cleanedFileUrl) return;
+
+      setIsAnalyzing(true);
+      try {
+        // URL로부터 파일 데이터를 Blob 형태로 가져오기
+        const response = await fetch(result.cleanedFileUrl);
+        const blob = await response.blob();
+
+        // 백엔드 전송을 위한 FormData 생성
+        const formData = new FormData();
+        const file = new File([blob], result.cleanedFileName || "cleaned_file.xlsx", {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        });
+        
+        formData.append("files", file);
+        formData.append("client_uuid", clientUuid);
+
+        console.log("🚀 백엔드로 전송 시작:", {
+          url: "http://localhost:8000/score/evaluate-multiple",
+          clientUuid: clientUuid,
+          fileName: file.name,
+          fileSize: file.size
+        });
+
+        // FastAPI 백엔드로 요청 보내기
+        const apiResponse = await fetch("http://localhost:8000/score/evaluate-multiple", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error("분석 요청에 실패했습니다.");
+        }
+
+        const data = await apiResponse.json();
+        console.log("분석 결과:", data);
+
+        // 필요시 결과 데이터를 부모 컴포넌트나 상태에 저장 후 화면 전환
+        // setAnalysisResult(data.results);
+        setSelectedFile(result.cleanedFileName);
+        setScreen("results");
+
+      } catch (error) {
+        console.error("에러 발생:", error);
+        alert("파일 분석 중 오류가 발생했습니다.");
+      } finally {
+        setIsAnalyzing(false);
+      }
+    };
+
   const [filter, setFilter] = useState("전체");
   const [page, setPage] = useState(1);
   const [selectedIssue, setSelectedIssue] = useState(result.issues[0] || null);
@@ -1947,17 +2004,18 @@ function handleSelectIssue(issue) {
 
                 <button
                   type="button"
-                  disabled={!canAnalyze}
-                  onClick={() => setScreen("results")}
+                  disabled={!canAnalyze || isAnalyzing || !clientUuid}
+                  onClick={handleAnalyze}
                   className={`px-5 py-2 rounded-lg text-xs font-bold transition ${
-                    canAnalyze
+                    canAnalyze && !isAnalyzing && clientUuid
                       ? "bg-blue-600 text-white hover:bg-blue-700"
                       : "bg-slate-100 text-slate-400 cursor-not-allowed"
                   }`}
                 >
-                  분석 시작
+                  {isAnalyzing ? "분석 중..." : "분석 시작"}
                 </button>
               </div>
+            </div>
 
               {!canAnalyze && (
                 <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mt-3">
@@ -1976,6 +2034,5 @@ function handleSelectIssue(issue) {
           </div>
         </div>
       </div>
-    </div>
   );
 }

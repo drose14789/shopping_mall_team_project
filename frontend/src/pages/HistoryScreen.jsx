@@ -1,14 +1,42 @@
-import { useState } from "react";
-import { HISTORY_DATA, HISTORY_PAGE_SIZE } from "../constants/data"; // 경로에 맞게 수정
-import { getSeasonStyle } from "../utils/helpers";
+import { useState, useEffect  } from "react";
+import { HISTORY_PAGE_SIZE } from "../constants/data"; // 경로에 맞게 수정
+import { getSeasonStyle, getClientUuid  } from "../utils/helpers";
 
 
-export default function HistoryScreen({ setScreen, }) {
+export default function HistoryScreen({setScreen,setSelectedFile}) {
+    const [historyData, setHistoryData] = useState([]);
     const [historyPage, setHistoryPage] = useState(0);
-    const historyPageCount = Math.max(1, Math.ceil(HISTORY_DATA.length / HISTORY_PAGE_SIZE));
+    const historyPageCount = Math.max(1, Math.ceil(historyData.length / HISTORY_PAGE_SIZE));
     const historyPageStart = historyPage * HISTORY_PAGE_SIZE;
-    const historyPageEnd = Math.min(historyPageStart + HISTORY_PAGE_SIZE, HISTORY_DATA.length);
-    const pagedHistory = HISTORY_DATA.slice(historyPageStart, historyPageEnd);
+    const historyPageEnd = Math.min(historyPageStart + HISTORY_PAGE_SIZE, historyData.length);
+    const pagedHistory = historyData.slice(historyPageStart, historyPageEnd);
+    useEffect(() => {
+
+    const client_uuid = getClientUuid();
+
+    fetch(
+        `http://localhost:8000/score/history/${client_uuid}`
+    )
+    .then(res => res.json())
+    .then(data => {
+
+        console.log("History 데이터:", data);
+
+        setHistoryData(
+            Array.isArray(data)
+            ? data
+            : []
+        );
+
+    })
+    .catch(err => {
+        console.error(
+            "History 조회 실패",
+            err
+        );
+    });
+
+}, []);
     return (<div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-4">
       <div>
         <h2 className="text-xl font-bold text-slate-800">
@@ -85,9 +113,9 @@ export default function HistoryScreen({ setScreen, }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {pagedHistory.map((row) => (<tr key={row.file} className="hover:bg-slate-50/70 transition-colors">
+            {pagedHistory.map((row) => (<tr key={row.file_name} className="hover:bg-slate-50/70 transition-colors">
                 <td className="px-5 py-3.5 text-xs font-medium text-slate-700 whitespace-nowrap">
-                  {row.date}
+                  {row.created_at?.slice(0,10)}
                 </td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-2">
@@ -98,31 +126,33 @@ export default function HistoryScreen({ setScreen, }) {
                       </svg>
                     </div>
                     <span className="text-xs text-slate-600 font-medium">
-                      {row.file}
+                      {row.file_name}
                     </span>
                   </div>
                 </td>
                 <td className="px-5 py-3.5 text-xs text-slate-500">
-                  {row.period}
+                  {row.analysis_start_time}
+                  ~
+                  {row.analysis_end_time}
                 </td>
                 <td className="px-5 py-3.5">
                   {(() => {
-                const seasonStyle = getSeasonStyle(row.season);
+                const seasonStyle = getSeasonStyle(row.quarter);
                 return (<span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border font-semibold whitespace-nowrap" style={{
                         backgroundColor: seasonStyle.bg,
                         color: seasonStyle.text,
                         borderColor: seasonStyle.border,
                     }}>
                         <span>{seasonStyle.emoji}</span>
-                        {row.season}
+                        {row.quarter}
                       </span>);
             })()}
                 </td>
                 <td className="px-5 py-3.5 text-xs font-semibold text-slate-700 whitespace-nowrap">
-                  {row.count}
+                  {row.product_count}
                 </td>
                 <td className="px-5 py-3.5">
-                  <button onClick={() => setScreen("results")} className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1 whitespace-nowrap">
+                 <button onClick={() => {setSelectedFile(row.file_name);setScreen("results");}} className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline transition flex items-center gap-1 whitespace-nowrap">
                     결과 보기
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <polyline points="9 18 15 12 9 6"/>
@@ -133,11 +163,11 @@ export default function HistoryScreen({ setScreen, }) {
           </tbody>
           </table>
 
-          {HISTORY_DATA.length > HISTORY_PAGE_SIZE && (<div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50/50">
+          {historyData.length > HISTORY_PAGE_SIZE && (<div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50/50">
               <p className="text-[11px] text-slate-400">
                 {historyPageStart + 1}–{historyPageEnd} /{" "}
                 <strong className="text-slate-600">
-                  {HISTORY_DATA.length}
+                  {historyData.length}
                 </strong>
                 건
               </p>
