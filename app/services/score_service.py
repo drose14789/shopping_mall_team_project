@@ -356,6 +356,18 @@ def evaluate_single_excel_file(
                 feedback[label] = f'상위 10% 그룹 평균의 {final_score}% 수준으로 개선이 필요합니다.'
 
         percentile_scores = {}
+        
+        # 지표별 현실적인 만점 기준선(Cap) 설정
+        # (이 수치에 도달하면 100점, 그 아래는 비율대로 비례해서 점수 부여)
+        metric_caps = {
+            'click_rate': 5.0,        # 상품클릭률 5%면 만점
+            'wish_conv_rate': 6.0,    # 찜전환율 6%면 만점
+            'cart_conv_rate': 7.0,    # 장바구니전환율 7%면 만점
+            'conv_rate': 3.0,         # 구매전환율 3%면 만점
+            'return_stability': 100.0,# 반품안정성은 기존 로직 유지 (0~100)
+            'roas': 600.0,            # ROAS 500%면 만점
+        }
+
         for col in metric_labels.keys():
             user_val = user_metrics[col]
             total_series = total_pool_df[col].dropna() if col in total_pool_df.columns else pd.Series()
@@ -366,8 +378,22 @@ def evaluate_single_excel_file(
                     top_mean = top_mean if not pd.isna(top_mean) and top_mean > 0 else total_series.mean()
                     diff_ratio = abs(user_val - top_mean) / top_mean if top_mean > 0 else 0.0
                     percentile_scores[col] = round(max(0.0, 100.0 - (diff_ratio * 100.0)), 1)
+                
+                elif col == 'return_stability':
+                    # 반품 안정성은 기존에 만든 값 그대로 사용
+                    percentile_scores[col] = round(user_val, 1)
+                    
                 else:
-                    percentile_scores[col] = round((total_series < user_val).mean() * 100, 1)
+                    # 1. 값이 0이면 정직하게 0점
+                    if user_val == 0:
+                        percentile_scores[col] = 0.0
+                    else:
+                        # 2. 설정해둔 고정 만점 기준(Cap)과 비교하여 점수 산출
+                        max_limit = metric_caps.get(col, 10.0)
+                        calculated_score = (user_val / max_limit) * 100.0
+                        
+                        # 3. 최소 5점은 주되, 100점을 초과하지 않도록 캡(Cap) 설정
+                        percentile_scores[col] = round(min(100.0, max(5.0, calculated_score)), 1)
             else:
                 percentile_scores[col] = 50.0
 

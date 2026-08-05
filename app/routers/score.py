@@ -140,7 +140,7 @@ def get_history_results(client_uuid: str):
                         MAX(analysis_end_time) AS analysis_end_time,
                         MAX(quarter) AS quarter,
                         MAX(created_at) AS created_at,
-                        COUNT(DISTINCT product_name) AS product_count
+                        COUNT(DISTINCT product_id) AS product_count
                     FROM evaluation_results
                     WHERE client_uuid = :client_uuid
                     GROUP BY file_name
