@@ -22,6 +22,9 @@ def validate_and_read_excel(user_excel_path):
     """엑셀 파일을 읽고 필수 컬럼 및 데이터 구조를 검증"""
     try:
         user_df = pd.read_excel(user_excel_path)
+
+        # 엑셀 컬럼명 앞뒤 공백 제거
+        user_df.columns = [str(col).strip() for col in user_df.columns]
     except Exception as e:
         raise HTTPException(
             status_code=400,
@@ -180,7 +183,59 @@ def evaluate_single_excel_file(
 
         try:
             row_dict = row.to_dict()
+
+            # pandas가 빈 셀을 NaN으로 읽거나, 컬럼명이 살짝 다를 때 백엔드 검증 전에 보정
+            for key, value in list(row_dict.items()):
+                if pd.isna(value):
+                    row_dict[key] = ""
+
+            # 상품명 보정
+            if not row_dict.get("상품명"):
+                row_dict["상품명"] = f"상품명 미입력_{row_dict.get('상품ID', idx + 1)}"
+
+            # 카테고리 보정
+            if not row_dict.get("카테고리"):
+                row_dict["카테고리"] = "기타"
+
+            # 찜 유저수 컬럼명 보정
+            if "찜 유저수" not in row_dict:
+                row_dict["찜 유저수"] = (
+                    row_dict.get("상품 찜 유저수")
+                    or row_dict.get("찜유저수")
+                    or row_dict.get("찜수")
+                    or 0
+                )
+
+            # 숫자형 필수값 보정
+            numeric_required_cols = [
+                "노출수",
+                "클릭수",
+                "상품 상세 방문수",
+                "찜 유저수",
+                "장바구니 유저수",
+                "상품주문수",
+                "반품건수",
+                "광고과금액",
+                "주문금액",
+                "상품단가",
+            ]
+
+            for col in numeric_required_cols:
+                if col not in row_dict or row_dict[col] == "":
+                    row_dict[col] = 0
+
+            # 분석 기간/시즌 보정
+            if not row_dict.get("분석 시즌"):
+                row_dict["분석 시즌"] = row_dict.get("시즌", "")
+
+            if not row_dict.get("분석 시작월"):
+                row_dict["분석 시작월"] = ""
+
+            if not row_dict.get("분석 종료월"):
+                row_dict["분석 종료월"] = ""
+
             validated_row = ProductExcelRow(**row_dict)
+           
         except Exception as e:
             raise HTTPException(
                 status_code=400,
@@ -190,14 +245,12 @@ def evaluate_single_excel_file(
                 ),
             )
 
-        product_name_val = str(
-            row.get('상품명', row.get('상품 이름', f'상품_{idx + 1}'))
-        )
+        product_name_val = str(validated_row.product_name)
         category_name = validated_row.category
         quarter_val = validated_row.quarter
-        product_id = str(row.get('상품ID', ''))
-        analysis_start_time_val = row["분석 시작월"]
-        analysis_end_time_val = row["분석 종료월"]
+        product_id = str(row_dict.get("상품ID", ""))
+        analysis_start_time_val = validated_row.analysis_start_time
+        analysis_end_time_val = validated_row.analysis_end_time
         exposure = float(validated_row.exposure)
         click = float(validated_row.click)
         visit = float(validated_row.visit)
@@ -455,46 +508,53 @@ def evaluate_single_excel_file(
         recommended_ad_spend = round(max(0.0, calculated_spend), 2)
 
         result_data = {
-            'client_uuid': [client_uuid],  # 👈 전달받은 client_uuid 추가
-            'file_name' : [file_name],
+            'client_uuid': [client_uuid],
+            'file_name': [file_name],
+
             'product_name': [product_name_val],
             'product_id': [product_id],
             'category': [category_name],
             'quarter': [quarter_val],
-            'exposure_count': [int(exposure)],
-            'click_count': [int(click)],
-            'visit_count': [int(visit)],
-            'wish_user_count': [int(wish)],
-            'cart_user_count': [int(cart)],
-            'order_count': [int(order_cnt)],
-            'return_count': [int(return_cnt)],
+
+            'exposure_count': [float(exposure)],
+            'click_count': [float(click)],
+            'visit_count': [float(visit)],
+            'wish_user_count': [float(wish)],
+            'cart_user_count': [float(cart)],
+            'order_count': [float(order_cnt)],
+            'return_count': [float(return_cnt)],
+
             'ad_spend': [float(ad_cost)],
             'order_amount': [float(order_amount)],
             'unit_price': [float(item_price_val)],
+
             'calc_click_rate': [user_metrics['click_rate']],
             'calc_wish_conv': [user_metrics['wish_conv_rate']],
             'calc_cart_conv': [user_metrics['cart_conv_rate']],
             'calc_conv_rate': [user_metrics['conv_rate']],
             'calc_return_stability': [user_metrics['return_stability']],
             'calc_roas': [user_metrics['roas']],
+
             'score_click_rate': [percentile_scores['click_rate']],
             'score_wish_conv': [percentile_scores['wish_conv_rate']],
             'score_cart_conv': [percentile_scores['cart_conv_rate']],
             'score_conv_rate': [percentile_scores['conv_rate']],
             'score_return_stability': [percentile_scores['return_stability']],
             'score_roas': [percentile_scores['roas']],
+
             'weight_click_rate': [dynamic_weights['click_rate']],
             'weight_wish_conv': [dynamic_weights['wish_conv_rate']],
             'weight_cart_conv': [dynamic_weights['cart_conv_rate']],
             'weight_conv_rate': [dynamic_weights['conv_rate']],
             'weight_return_stability': [dynamic_weights['return_stability']],
             'weight_roas': [dynamic_weights['roas']],
+
             'total_score': [total_score],
             'recommended_ad_spend': [recommended_ad_spend],
             'product_type': [product_type],
-            'analysis_start_time': [analysis_start_time_val],  # 👈 분석 시작 시간 컬럼 추가
-            'analysis_end_time': [analysis_end_time_val],  # 👈 분석 종료 시간 컬럼 추가
-            'created_at': [analysis_time],  # 👈 시간순 정렬을 위한 분석 시간 추가
+            'analysis_start_time': [analysis_start_time_val],
+            'analysis_end_time': [analysis_end_time_val],
+            'created_at': [analysis_time],
         }
 
         result_df = pd.DataFrame(result_data)
@@ -505,6 +565,7 @@ def evaluate_single_excel_file(
                 )
             except Exception as e:
                 print(f'-> DB 저장 실패: {e}')
+                raise
 
         file_results.append({
             'row_index': idx + 2,
