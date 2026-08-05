@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Private raw data
+src/data/preSaleBaseRows.json
+src/data/raw/
+src/data/*.xlsx
