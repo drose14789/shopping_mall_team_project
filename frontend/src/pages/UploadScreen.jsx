@@ -51,7 +51,6 @@ function getSeasonFromPeriod(startMonth, endMonth) {
 }
 
 const OPTIONAL_COLS = [
-  "상품단가",
   "카테고리",
   "시즌",
   "광고비비중",
@@ -73,7 +72,6 @@ const NUMERIC_COLS = [
   "찜 유저수",
   "상품주문수",
   "반품건수",
-  "상품단가",
 ];
 
 const REQUIRED_UPLOAD_COLS = [
@@ -338,7 +336,6 @@ const OPTIONAL_ALIASES = {
   장바구니전환율: ["장바구니 전환율", "장바구니전환율"],
   반품률: ["반품률"],
   주문수량: ["주문수량", "주문 수량"],
-  상품단가: ["상품단가", "상품 단가", "판매가", "상품금액"],
 };
 
 function normalizeColumnName(value) {
@@ -579,7 +576,6 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
 
   const missingColumns = requiredCols.filter((col) => {
     if (col === "판매 사이트") return false;
-    if (col === "상품단가") return false;
     return !columnMap[col];
   });
 
@@ -638,7 +634,6 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
 
     requiredCols.forEach((col) => {
       if (col === "판매 사이트") return;
-      if (col === "상품단가") return;
       if (!columnMap[col]) return;
 
       const value = normalizeValue(row[col]);
@@ -975,13 +970,13 @@ export default function UploadScreen({ result, setScreen, selectedFile, setSelec
   : [];
     return (<>
       {showModal && inspectionResult && (
-  <InspectionModal
-    result={inspectionResult}
-    onClose={() => setShowModal(false)}
-    setScreen={setScreen}
-    setSelectedFile={setSelectedFile}
-  />
-)}
+        <InspectionModal
+          result={inspectionResult}
+          onClose={() => setShowModal(false)}
+          setScreen={setScreen}
+          setSelectedFile={setSelectedFile}
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-4">
         {/* Page heading */}
