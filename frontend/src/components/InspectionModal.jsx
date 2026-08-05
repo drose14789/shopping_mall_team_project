@@ -902,9 +902,9 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
                         : 0;
                       const numAvg = parseFloat(avgRating);
 
-                      const badgeColor = numAvg < 3 
+                      const badgeColor = numAvg < 3
                         ? "bg-rose-50 text-rose-600 border-rose-200" 
-                        : numAvg <= 4 
+                        : numAvg <= 4
                           ? "bg-amber-50 text-amber-600 border-amber-200" 
                           : "bg-emerald-50 text-emerald-600 border-emerald-200";
 
@@ -918,37 +918,100 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
                       }
 
                       return (
-                        <div key={keyword} className="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                              🏷️ #{keyword} <span className="text-[10px] font-normal text-slate-400">({safeReviews.length}개 리뷰)</span>
+                        <div
+                          key={keyword}
+                          className={`rounded-xl p-4 border ${
+                            numAvg < 3
+                              ? "bg-rose-50 border-rose-200"
+                              : numAvg <= 4
+                                ? "bg-amber-50 border-amber-200"
+                                : "bg-emerald-50 border-emerald-200"
+                          }`}
+                        >
+                          {/* 키워드 + 점수 */}
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                              🏷️ #{keyword}
+                              <span className="text-[11px] font-normal text-slate-400">
+                                ({safeReviews.length}개 리뷰)
+                              </span>
                             </span>
-                            <span className={`text-xs px-2.5 py-0.5 rounded-full border font-bold ${badgeColor}`}>
-                              평점 평균: {avgRating}점
+
+                            <span
+                              className={`text-sm px-3 py-1 rounded-full border font-bold ${badgeColor}`}
+                            >
+                              {Array.from({ length: Math.round(numAvg) })
+                                .map(() => "⭐")
+                                .join("")}
+                              <span className="ml-1 text-xs">
+                                {avgRating}점
+                              </span>
                             </span>
                           </div>
 
-                          <div className="bg-white rounded-lg p-2.5 mb-3 border border-slate-200/60 text-[11px] font-medium text-slate-600 shadow-2xs">
+
+                          {/* 추천 영역 */}
+                          <div
+                            className={`rounded-lg p-3 mb-4 border text-xs font-semibold ${
+                              numAvg < 3
+                                ? "bg-white border-rose-200 text-rose-700"
+                                : numAvg <= 4
+                                  ? "bg-white border-amber-200 text-amber-700"
+                                  : "bg-white border-emerald-200 text-emerald-700"
+                            }`}
+                          >
                             💡 {recommendationText}
                           </div>
 
+
+                          {/* 실제 리뷰 영역 */}
                           <div className="space-y-2">
                             {safeReviews.length > 0 ? (
                               safeReviews.map((r, idx) => (
-                                <div key={idx} className="bg-white rounded-lg p-3 border border-slate-100 text-xs shadow-2xs">
-                                  <div className="flex items-center justify-between mb-1 text-[10px] text-slate-400">
-                                    <span>⭐ {r?.rating ?? 0}점</span>
-                                    <span>{r?.date_created ? new Date(r.date_created).toLocaleDateString() : ''}</span>
+                                <div
+                                  key={idx}
+                                  className="bg-white rounded-lg p-3 border border-slate-100 text-xs shadow-sm"
+                                >
+                                  <div className="flex items-center justify-between mb-2">
+                                    
+                                    {/* 별점 */}
+                                    <span className="text-sm tracking-wide">
+                                      {Array.from({
+                                        length: Math.round(r?.rating ?? 0)
+                                      })
+                                        .map(() => "⭐")
+                                        .join("")}
+
+                                      <span className="ml-1 text-xs text-slate-500">
+                                        {r?.rating ?? 0}점
+                                      </span>
+                                    </span>
+
+
+                                    {/* 날짜 */}
+                                    <span className="text-[11px] text-slate-400">
+                                      {r?.date_created
+                                        ? new Date(r.date_created).toLocaleDateString()
+                                        : ""}
+                                    </span>
+
                                   </div>
+
+
+                                  {/* 리뷰 내용 */}
                                   <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
                                     {r?.contents || "내용 없음"}
                                   </p>
+
                                 </div>
                               ))
                             ) : (
-                              <p className="text-[11px] text-slate-400 py-1">이 키워드와 매칭된 리뷰가 없습니다.</p>
+                              <p className="text-[11px] text-slate-400 py-1">
+                                이 키워드와 매칭된 리뷰가 없습니다.
+                              </p>
                             )}
                           </div>
+
                         </div>
                       );
                     })}
