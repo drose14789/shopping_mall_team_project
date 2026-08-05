@@ -171,6 +171,23 @@ def evaluate_single_excel_file(
     # 테이블 존재 여부 확인 및 생성 (uuid 컬럼 포함)
     ensure_evaluation_table_exists(engine)
 
+    if not file_name:
+        file_name = os.path.basename(user_excel_path)
+
+    # 같은 사용자가 같은 파일을 다시 분석하면 기존 결과를 지우고 새 결과로 교체
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                DELETE FROM evaluation_results
+                WHERE client_uuid = :client_uuid
+                AND file_name = :file_name
+                """),
+            {
+                "client_uuid": client_uuid,
+                "file_name": file_name,
+            },
+        )
+
     user_df = validate_and_read_excel(user_excel_path)
     file_results = []
 
