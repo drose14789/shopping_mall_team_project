@@ -1,4 +1,5 @@
 from typing import List
+import json
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 import tempfile
 import os
@@ -6,6 +7,7 @@ from sqlalchemy import text
 from xlsxwriter import app
 from app.services.score_service import evaluate_single_excel_file
 import scripts.db_setting as db
+import app.services.review_cr as review_cr
 
 
 router = APIRouter(prefix="/score")
@@ -31,8 +33,51 @@ async def evaluate_multiple_files(
 
             # 단일 파일 분석 수행
             file_results = evaluate_single_excel_file(tmp_path, engine, client_uuid=client_uuid, file_name=file.filename)
-            all_results.extend(file_results)
-            print(f"-> {file.filename} 분석 완료")
+            processed_file_results = []
+            for row in file_results:
+                product_id = row.get('product_id')
+                print(f"👉 [디버그] 가져온 product_id: {repr(product_id)}, 타입: {type(product_id)}")
+
+                if product_id is not None:
+                    product_id = str(product_id).replace(',', '').strip()
+
+                diagnostic_type = row.get('product_type') or row.get('diagnostic_type') # 분석된 진단 유형
+                
+                # 진단 유형에 해당하는 우선 키워드 가져오기 (없으면 기본값)
+                target_keywords = review_cr.DIAGNOSTIC_KEYWORD_MAP.get(diagnostic_type, ["만족도", "소재"])
+                
+                # 키워드별 중복 없는 최신순 리뷰 5개씩 수집
+                keyword_reviews = review_cr.fetch_reviews_by_each_keyword(product_id, target_keywords, limit_per_keyword=5)
+                print(f"👉 [디버그] 크롤링해서 가져온 리뷰: {keyword_reviews}")
+                
+                # DB 저장을 위해 리뷰 데이터를 JSON 문자열로 변환
+                reviews_json_string = json.dumps(keyword_reviews, ensure_ascii=False)
+                
+                with engine.begin() as connection:
+                    update_query = text("""
+                        UPDATE evaluation_results 
+                        SET matched_reviews = :matched_reviews
+                        WHERE client_uuid = :client_uuid 
+                          AND product_id = :product_id
+                          AND file_name = :file_name
+                    """)
+                    connection.execute(update_query, {
+                        "matched_reviews": reviews_json_string,
+                        "client_uuid": client_uuid,
+                        "product_id": product_id,
+                        "file_name": file.filename
+                    })
+                
+                # 프론트엔드로 전달할 결과에 반영
+                row['target_keywords'] = target_keywords
+                row['matched_reviews'] = keyword_reviews # 프론트에서 렌더링할 딕셔너리
+                row['matched_reviews_json'] = reviews_json_string
+                
+                processed_file_results.append(row)
+
+            all_results.extend(processed_file_results)
+            print(f"-> {file.filename} 분석 및 키워드 리뷰 수집 완료")
+            
             
         except Exception as e:
             # 🔴 에러 발생 시 구체적인 원인을 터미널에 출력

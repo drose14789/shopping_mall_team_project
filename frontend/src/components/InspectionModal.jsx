@@ -307,140 +307,69 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
 
     const d = {
         score: product.total_score,
-
         diagnosisType: product.product_type,
-
-        actionSummary:
-            `${product.product_type} 상품으로 분석되었습니다.`,
-
-        recommendedAdBudget:
-            `${Math.round(product.recommended_ad_spend).toLocaleString()}원`,
+        actionSummary: `${product.product_type} 상품으로 분석되었습니다.`,
+        recommendedAdBudget: `${Math.round(product.recommended_ad_spend).toLocaleString()}원`,
 
         scoreBars: [
-            {
-                label: "상품클릭률",
-                score: product.score_click_rate
-            },
-            {
-                label: "찜전환율",
-                score: product.score_wish_conv
-            },
-            {
-                label: "장바구니전환율",
-                score: product.score_cart_conv
-            },
-            {
-                label: "구매전환율",
-                score: product.score_conv_rate
-            },
-            {
-                label: "반품 안정성",
-                score: product.score_return_stability
-            },
-            {
-                label: "ROAS",
-                score: product.score_roas
-            }
+            { label: "상품클릭률", score: product.score_click_rate },
+            { label: "찜전환율", score: product.score_wish_conv },
+            { label: "장바구니전환율", score: product.score_cart_conv },
+            { label: "구매전환율", score: product.score_conv_rate },
+            { label: "반품 안정성", score: product.score_return_stability },
+            { label: "ROAS", score: product.score_roas }
         ],
 
         basicRawData: [
-            {
-                label: "상품명",
-                value: product.product_name
-            },
-            {
-                label: "카테고리",
-                value: product.category
-            },
-            {
-                label: "분기",
-                value: product.quarter
-            },
-            {
-                label: "상품ID",
-                value: product.product_id
-            }
+            { label: "상품명", value: product.product_name },
+            { label: "카테고리", value: product.category },
+            { label: "분기", value: product.quarter },
+            { label: "상품ID", value: product.product_id }
         ],
 
         performanceRawData: [
-            {
-                label: "노출수",
-                value: product.exposure_count?.toLocaleString()
-            },
-            {
-                label: "클릭수",
-                value: product.click_count?.toLocaleString()
-            },
-            {
-                label: "상품 상세 방문",
-                value: product.visit_count?.toLocaleString()
-            },
-            {
-                label: "찜 유저수",
-                value: product.wish_user_count?.toLocaleString()
-            },
-            {
-                label: "장바구니 유저수",
-                value: product.cart_user_count?.toLocaleString()
-            },
-            {
-                label: "주문수",
-                value: product.order_count?.toLocaleString()
-            },
-            {
-                label: "반품수",
-                value: product.return_count?.toLocaleString()
-            },
-            {
-                label: "광고비",
-                value: `${product.ad_spend?.toLocaleString()}원`
-            },
-            {
-                label: "주문금액",
-                value: `${product.order_amount?.toLocaleString()}원`
-            },
-            {
-                label: "상품단가",
-                value: `${product.unit_price?.toLocaleString()}원`
-            }
+            { label: "노출수", value: product.exposure_count?.toLocaleString() },
+            { label: "클릭수", value: product.click_count?.toLocaleString() },
+            { label: "상품 상세 방문", value: product.visit_count?.toLocaleString() },
+            { label: "찜 유저수", value: product.wish_user_count?.toLocaleString() },
+            { label: "장바구니 유저수", value: product.cart_user_count?.toLocaleString() },
+            { label: "주문수", value: product.order_count?.toLocaleString() },
+            { label: "반품수", value: product.return_count?.toLocaleString() },
+            { label: "광고비", value: `${product.ad_spend?.toLocaleString()}원` },
+            { label: "주문금액", value: `${product.order_amount?.toLocaleString()}원` },
+            { label: "상품단가", value: `${product.unit_price?.toLocaleString()}원` }
         ],
 
         coachingFeedback: [
             {
                 label: "상품클릭률",
                 status: product.score_click_rate >= 70 ? "veryGood" : "weak",
-                text:
-                    `상품 클릭률 ${product.calc_click_rate}% 기준으로 광고 유입 반응을 분석했습니다.`
+                text: `상품 클릭률 ${product.calc_click_rate}% 기준으로 광고 유입 반응을 분석했습니다.`
             },
             {
                 label: "찜전환율",
                 status: product.score_wish_conv >= 70 ? "good" : "weak",
-                text:
-                    `찜 전환율 ${product.calc_wish_conv}% 입니다.`
+                text: `찜 전환율 ${product.calc_wish_conv}% 입니다.`
             },
             {
                 label: "장바구니전환율",
                 status: product.score_cart_conv >= 70 ? "good" : "weak",
-                text:
-                    `장바구니 전환율 ${product.calc_cart_conv}% 입니다.`
+                text: `장바구니 전환율 ${product.calc_cart_conv}% 입니다.`
             },
             {
                 label: "구매전환율",
                 status: product.score_conv_rate >= 70 ? "good" : "weak",
-                text:
-                    `구매 전환율 ${product.calc_conv_rate}% 입니다.`
+                text: `구매 전환율 ${product.calc_conv_rate}% 입니다.`
             },
             {
                 label: "반품안정성",
                 status: product.score_return_stability >= 70 ? "good" : "weak",
-                text:
-                    `반품 안정성 ${product.calc_return_stability}% 입니다.`
+                text: `반품 안정성 ${product.calc_return_stability}% 입니다.`
             },
             {
                 label: "ROAS",
                 status: product.score_roas >= 70 ? "veryGood" : "weak",
-                text:
-                    `ROAS ${product.calc_roas}% 기준 광고 효율을 분석했습니다.`
+                text: `ROAS ${product.calc_roas}% 기준 광고 효율을 분석했습니다.`
             }
         ],
 
@@ -450,19 +379,18 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
         ],
 
         actionItems: [
-            {
-                tag: "예산 테스트",
-                text:
-                    "현재 광고 효율을 기준으로 단계적인 광고 예산 확대를 검토합니다."
-            },
-            {
-                tag: "전환 점검",
-                text:
-                    "구매 전환 및 반품 데이터를 지속적으로 확인합니다."
-            }
-        ]
+            { tag: "예산 테스트", text: "현재 광고 효율을 기준으로 단계적인 광고 예산 확대를 검토합니다." },
+            { tag: "전환 점검", text: "구매 전환 및 반품 데이터를 지속적으로 확인합니다." }
+        ],
     };
-
+    const reviewData = product.matched_reviews 
+    ? JSON.parse(product.matched_reviews) 
+    : {};
+    const hasReviewData =
+    reviewData &&
+    Object.values(reviewData).some(
+      (reviews) => Array.isArray(reviews) && reviews.length > 0
+    );
 
     const bottleneckCauses = d.bottleneckCauses;
     const actionItems = d.actionItems;
@@ -473,538 +401,578 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
             : d.score >= 40
                 ? "#D97706"
                 : "#E11D48";
-    return (<div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{
             backgroundColor: "rgba(15,23,42,0.45)",
             backdropFilter: "blur(3px)",
         }} onClick={(e) => {
             if (e.target === e.currentTarget)
                 onClose();
         }}>
-      <div className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" style={{ width: "78%", height: "88vh", maxWidth: 1080 }}>
-        {/* Modal header */}
-        <div className="flex-shrink-0 flex items-start justify-between px-7 py-5 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2.5 mb-1.5">
-              <h2 className="text-base font-bold text-slate-800">
-                {product.name}
-              </h2>
-
-              <span className={`text-xs px-2 py-1 rounded-md border font-semibold ${actionBadge(d.diagnosisType)}`}>
-                {d.diagnosisType}
-              </span>
-
-              <span className="text-xs font-semibold text-rose-500">
-                총점 {d.score}점
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-400">
-              카테고리: {product.cat} · 상품별 상세 진단
-            </p>
-          </div>
-
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* Modal body — scrollable */}
-        <div className="flex-1 overflow-y-auto px-7 py-6 space-y-5">
-          {/* 최종 진단 요약 */}
-          <div className="rounded-2xl p-6 border border-blue-200 shadow-sm" style={{
-            background: "linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 55%, #EEF2FF 100%)",
-        }}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">
-                    최종 진단 요약
-                  </span>
-
-                  <span className={`text-xs px-2.5 py-1 rounded-md border font-bold ${actionBadge(d.diagnosisType)}`}>
+          <div className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" style={{ width: "78%", height: "88vh", maxWidth: 1080 }}>
+            {/* Modal header */}
+            <div className="flex-shrink-0 flex items-start justify-between px-7 py-5 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <h2 className="text-base font-bold text-slate-800">
+                    {product.name}
+                  </h2>
+                  <span className={`text-xs px-2 py-1 rounded-md border font-semibold ${actionBadge(d.diagnosisType)}`}>
                     {d.diagnosisType}
                   </span>
+                  <span className="text-xs font-semibold text-rose-500">
+                    총점 {d.score}점
+                  </span>
                 </div>
-
-                <p className="text-base font-bold text-slate-800 leading-relaxed mb-2">
-                  {d.actionSummary}
-                </p>
-
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  클릭, 구매 전환, 찜 전환, 장바구니 전환, 구매 전환, 반품 안정성, ROAS의 점수를 함께 반영해
-                  최종 진단 유형과 추천 액션을 산정했습니다.
+                <p className="text-xs text-slate-400">
+                  카테고리: {product.cat} · 상품별 상세 진단
                 </p>
               </div>
-            </div>
-          </div>
-
-          {/* 광고 추천 점수 + 권장 광고 운영 금액 */}
-          <div className="bg-white rounded-xl border border-slate-100 p-5">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  광고 추천 점수
-                </p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  같은 카테고리 백분위 점수와 가중치를 반영한 종합 추천 점수입니다.
-                </p>
-              </div>
-
-              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-1 rounded-md">
-                매출 상관 가중치 기준
-              </span>
+              <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition flex-shrink-0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
             </div>
 
-            <div className="grid grid-cols-[150px_1fr_230px] gap-6 items-center">
-              {/* 왼쪽: 원형 점수 */}
-              <div className="flex flex-col items-center justify-center">
-                <div className="relative w-24 h-24">
-                  <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
-                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" strokeWidth="3"/>
-                    <circle cx="18" cy="18" r="15.9" fill="none" stroke={scoreColor} strokeWidth="3" strokeDasharray={`${d.score} ${100 - d.score}`} strokeLinecap="round"/>
-                  </svg>
-
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-bold" style={{ color: scoreColor }}>
-                      {d.score}
-                    </span>
-                    <span className="text-[9px] text-slate-400">
-                      / 100
-                    </span>
+            {/* Modal body — scrollable */}
+            <div className="flex-1 overflow-y-auto px-7 py-6 space-y-5">
+              {/* 최종 진단 요약 */}
+              <div className="rounded-2xl p-6 border border-blue-200 shadow-sm" style={{
+                background: "linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 55%, #EEF2FF 100%)",
+              }}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">
+                        최종 진단 요약
+                      </span>
+                      <span className={`text-xs px-2.5 py-1 rounded-md border font-bold ${actionBadge(d.diagnosisType)}`}>
+                        {d.diagnosisType}
+                      </span>
+                    </div>
+                    <p className="text-base font-bold text-slate-800 leading-relaxed mb-2">
+                      {d.actionSummary}
+                    </p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      클릭, 구매 전환, 찜 전환, 장바구니 전환, 구매 전환, 반품 안정성, ROAS의 점수를 함께 반영해
+                      최종 진단 유형과 추천 액션을 산정했습니다.
+                    </p>
                   </div>
                 </div>
-
-                <p className="text-xs font-semibold mt-2" style={{ color: scoreColor }}>
-                  광고 추천 점수
-                </p>
               </div>
 
-              {/* 가운데: 지표별 점수 */}
-              <div>
+              {/* 광고 추천 점수 + 권장 광고 운영 금액 */}
+              <div className="bg-white rounded-xl border border-slate-100 p-5">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      광고 추천 점수
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      같은 카테고리 백분위 점수와 가중치를 반영한 종합 추천 점수입니다.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-1 rounded-md">
+                    매출 상관 가중치 기준
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-[150px_1fr_230px] gap-6 items-center">
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="relative w-24 h-24">
+                      <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" strokeWidth="3"/>
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke={scoreColor} strokeWidth="3" strokeDasharray={`${d.score} ${100 - d.score}`} strokeLinecap="round"/>
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-2xl font-bold" style={{ color: scoreColor }}>
+                          {d.score}
+                        </span>
+                        <span className="text-[9px] text-slate-400">
+                          / 100
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs font-semibold mt-2" style={{ color: scoreColor }}>
+                      광고 추천 점수
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          지표별 점수
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          추천 점수 산정에 사용된 6개 지표입니다.
+                        </p>
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        백분위 · 가중치 기준
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      {d.scoreBars.map((s) => (
+                        <div key={s.label} className="grid grid-cols-[140px_1fr_44px] items-center gap-3">
+                          <span className="text-xs text-slate-500">{s.label}</span>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all bg-blue-600" style={{ width: `${s.score}%` }}/>
+                          </div>
+                          <span className="text-xs font-bold text-slate-700 text-right">{s.score}점</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-4 h-full flex flex-col justify-center">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+                        권장 광고 운영 금액
+                      </p>
+                      <span className="text-[10px] font-bold text-blue-600 bg-white border border-blue-100 px-2 py-0.5 rounded-md">
+                        참고 예산
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold text-blue-600 mb-2">
+                      {d.recommendedAdBudget}
+                    </p>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      상품금액과 내부 광고 효율 계산값을 반영해 산정한 참고용 광고 운영 예산입니다.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 원본 데이터 요약 */}
+              <div className="bg-white rounded-xl border border-slate-100 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      지표별 점수
+                      원본 데이터 요약
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      추천 점수 산정에 사용된 6개 지표입니다.
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      사용자가 업로드한 파일의 원본 입력값을 확인합니다.
                     </p>
                   </div>
-
-                  <p className="text-[10px] text-slate-400">
-                    백분위 · 가중치 기준
-                  </p>
+                  <p className="text-[10px] text-slate-400">업로드 파일 기준</p>
                 </div>
 
-                <div className="space-y-3">
-                  {d.scoreBars.map((s) => (<div key={s.label} className="grid grid-cols-[140px_1fr_44px] items-center gap-3">
-                      <span className="text-xs text-slate-500">
-                        {s.label}
-                      </span>
-
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all bg-blue-600" style={{
-                width: `${s.score}%`,
-            }}/>
+                <div className="mb-4">
+                  <p className="text-[11px] font-bold text-slate-400 mb-2">상품 기본 정보</p>
+                  <div className="grid grid-cols-4 gap-3">
+                    {d.basicRawData.map((m) => (
+                      <div key={m.label} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                        <p className="text-[10px] text-slate-400 font-semibold mb-0.5">{m.label}</p>
+                        <p className="text-sm font-bold text-slate-800 truncate">{m.value}</p>
                       </div>
+                    ))}
+                  </div>
+                </div>
 
-                      <span className="text-xs font-bold text-slate-700 text-right">
-                        {s.score}점
-                      </span>
-                    </div>))}
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400 mb-2">성과 원본 데이터</p>
+                  <div className="grid grid-cols-5 gap-3">
+                    {d.performanceRawData.map((m) => (
+                      <div key={m.label} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                        <p className="text-[10px] text-slate-400 font-semibold mb-0.5">{m.label}</p>
+                        <p className="text-sm font-bold text-slate-800 truncate">{m.value}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* 오른쪽: 권장 광고 운영 금액 */}
-              <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-4 h-full flex flex-col justify-center">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">
-                    권장 광고 운영 금액
-                  </p>
-
-                  <span className="text-[10px] font-bold text-blue-600 bg-white border border-blue-100 px-2 py-0.5 rounded-md">
-                    참고 예산
+              {/* 퍼널 및 코칭 피드백 영역 */}
+              <div className="bg-white rounded-xl border border-slate-100 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      전환 퍼널 및 지표 피드백
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      상품의 구매 여정 단계별 흐름을 분석합니다.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-1 rounded-md">
+                    카테고리 비교 기준
                   </span>
                 </div>
 
-                <p className="text-2xl font-bold text-blue-600 mb-2">
-                  {d.recommendedAdBudget}
-                </p>
-
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  상품금액과 내부 광고 효율 계산값을 반영해 산정한 참고용 광고 운영 예산입니다.
-                </p>
-              </div>
-            </div>
-          </div>
-
-
-          {/* 원본 데이터 요약 */}
-          <div className="bg-white rounded-xl border border-slate-100 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  원본 데이터 요약
-                </p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  사용자가 업로드한 파일의 원본 입력값을 확인합니다.
-                </p>
-              </div>
-
-              <p className="text-[10px] text-slate-400">
-                업로드 파일 기준
-              </p>
-            </div>
-
-            {/* 상품 기본 정보 */}
-            <div className="mb-4">
-              <p className="text-[11px] font-bold text-slate-400 mb-2">
-                상품 기본 정보
-              </p>
-
-              <div className="grid grid-cols-4 gap-3">
-                {d.basicRawData.map((m) => (<div key={m.label} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                    <p className="text-[10px] text-slate-400 font-semibold mb-0.5">
-                      {m.label}
-                    </p>
-                    <p className="text-sm font-bold text-slate-800 truncate">
-                      {m.value}
-                    </p>
-                  </div>))}
-              </div>
-            </div>
-
-            {/* 성과 원본 데이터 */}
-            <div>
-              <p className="text-[11px] font-bold text-slate-400 mb-2">
-                성과 원본 데이터
-              </p>
-
-              <div className="grid grid-cols-5 gap-3">
-                {d.performanceRawData.map((m) => (<div key={m.label} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                    <p className="text-[10px] text-slate-400 font-semibold mb-0.5">
-                      {m.label}
-                    </p>
-                    <p className="text-sm font-bold text-slate-800 truncate">
-                      {m.value}
-                    </p>
-                  </div>))}
-              </div>
-            </div>
-          </div>
-
-          {/* 퍼널·성과 지표 해석 */}
-          <div className="bg-white rounded-xl border border-slate-100 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  퍼널·성과 지표 해석
-                </p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  퍼널 전환 지표와 광고·리스크 보조 지표를 구분해 해석합니다.
-                </p>
-              </div>
-
-              <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-1 rounded-md">
-                카테고리 비교 기준
-              </span>
-            </div>
-
-            {(() => {
-            const getFeedback = (label) => d.coachingFeedback.find((item) => item.label === label);
-            const getStatusMeta = (status) => {
-                if (status === "veryGood") {
+                {(() => {
+                const getFeedback = (label) => d.coachingFeedback.find((item) => item.label === label);
+                const getStatusMeta = (status) => {
+                    if (status === "veryGood") {
+                        return {
+                            label: "매우 우수",
+                            card: "bg-blue-50 border-blue-200",
+                            title: "text-blue-700",
+                            text: "text-blue-600",
+                            softBadge: "bg-blue-50 text-blue-700 border-blue-200",
+                            badge: "bg-blue-600 text-white",
+                            dot: "bg-blue-500",
+                            line: "bg-blue-300",
+                            alert: false,
+                        };
+                    }
+                    if (status === "good") {
+                        return {
+                            label: "양호",
+                            card: "bg-emerald-50 border-emerald-200",
+                            title: "text-emerald-700",
+                            text: "text-emerald-600",
+                            softBadge: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                            badge: "bg-emerald-600 text-white",
+                            dot: "bg-emerald-500",
+                            line: "bg-emerald-300",
+                            alert: false,
+                        };
+                    }
+                    if (status === "normal") {
+                        return {
+                            label: "보통",
+                            card: "bg-slate-50 border-slate-200",
+                            title: "text-slate-700",
+                            text: "text-slate-500",
+                            softBadge: "bg-slate-50 text-slate-600 border-slate-200",
+                            badge: "bg-slate-200 text-slate-600",
+                            dot: "bg-slate-400",
+                            line: "bg-slate-300",
+                            alert: false,
+                        };
+                    }
                     return {
-                        label: "매우 우수",
-                        card: "bg-blue-50 border-blue-200",
-                        title: "text-blue-700",
-                        text: "text-blue-600",
-                        softBadge: "bg-blue-50 text-blue-700 border-blue-200",
-                        badge: "bg-blue-600 text-white",
-                        dot: "bg-blue-500",
-                        line: "bg-blue-300",
-                        alert: false,
+                        label: "개선 필요",
+                        card: "bg-amber-50 border-amber-300 ring-1 ring-amber-200",
+                        title: "text-amber-800",
+                        text: "text-amber-700",
+                        softBadge: "bg-amber-50 text-amber-700 border-amber-200",
+                        badge: "bg-amber-500 text-white",
+                        dot: "bg-amber-500",
+                        line: "bg-amber-300",
+                        alert: true,
                     };
-                }
-                if (status === "good") {
-                    return {
-                        label: "양호",
-                        card: "bg-emerald-50 border-emerald-200",
-                        title: "text-emerald-700",
-                        text: "text-emerald-600",
-                        softBadge: "bg-emerald-50 text-emerald-700 border-emerald-200",
-                        badge: "bg-emerald-600 text-white",
-                        dot: "bg-emerald-500",
-                        line: "bg-emerald-300",
-                        alert: false,
-                    };
-                }
-                if (status === "normal") {
-                    return {
-                        label: "보통",
-                        card: "bg-slate-50 border-slate-200",
-                        title: "text-slate-700",
-                        text: "text-slate-500",
-                        softBadge: "bg-slate-50 text-slate-600 border-slate-200",
-                        badge: "bg-slate-200 text-slate-600",
-                        dot: "bg-slate-400",
-                        line: "bg-slate-300",
-                        alert: false,
-                    };
-                }
-                return {
-                    label: "개선 필요",
-                    card: "bg-amber-50 border-amber-300 ring-1 ring-amber-200",
-                    title: "text-amber-800",
-                    text: "text-amber-700",
-                    softBadge: "bg-amber-50 text-amber-700 border-amber-200",
-                    badge: "bg-amber-500 text-white",
-                    dot: "bg-amber-500",
-                    line: "bg-amber-300",
-                    alert: true,
                 };
-            };
-            const funnelFeedbacks = [
-                {
-                    step: "클릭",
-                    metric: "상품클릭률",
-                    desc: "노출 대비 클릭 반응",
-                    feedback: getFeedback("상품클릭률"),
-                },
-                {
-                    step: "찜",
-                    metric: "찜전환율",
-                    desc: "상세 방문 대비 관심 저장",
-                    feedback: getFeedback("찜전환율"),
-                },
-                {
-                    step: "장바구니",
-                    metric: "장바구니전환율",
-                    desc: "구매 전 관심 행동",
-                    feedback: getFeedback("장바구니전환율"),
-                },
-                {
-                    step: "구매",
-                    metric: "구매전환율",
-                    desc: "최종 구매 전환",
-                    feedback: getFeedback("구매전환율"),
-                },
-            ];
-            const riskFeedbacks = [
-                {
-                    metric: "반품안정성",
-                    desc: "구매 이후 반품 리스크",
-                    feedback: getFeedback("반품안정성"),
-                },
-                {
-                    metric: "ROAS",
-                    desc: "광고비 대비 매출 효율",
-                    feedback: getFeedback("ROAS"),
-                },
-            ];
-            const weakSteps = funnelFeedbacks.filter((item) => item.feedback?.status === "weak");
-            return (<div className="space-y-5">
-                  {/* 퍼널 전환 지표 */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-[11px] font-bold text-slate-400">
-                        퍼널 전환 지표
-                      </p>
-                      <p className="text-[10px] text-slate-400">
-                        클릭 → 찜 → 장바구니 → 구매 흐름 기준
-                      </p>
-                    </div>
+                const funnelFeedbacks = [
+                    {
+                        step: "클릭",
+                        metric: "상품클릭률",
+                        desc: "노출 대비 클릭 반응",
+                        feedback: getFeedback("상품클릭률"),
+                    },
+                    {
+                        step: "찜",
+                        metric: "찜전환율",
+                        desc: "상세 방문 대비 관심 저장",
+                        feedback: getFeedback("찜전환율"),
+                    },
+                    {
+                        step: "장바구니",
+                        metric: "장바구니전환율",
+                        desc: "구매 전 관심 행동",
+                        feedback: getFeedback("장바구니전환율"),
+                    },
+                    {
+                        step: "구매",
+                        metric: "구매전환율",
+                        desc: "최종 구매 전환",
+                        feedback: getFeedback("구매전환율"),
+                    },
+                ];
+                const riskFeedbacks = [
+                    {
+                        metric: "반품안정성",
+                        desc: "구매 이후 반품 리스크",
+                        feedback: getFeedback("반품안정성"),
+                    },
+                    {
+                        metric: "ROAS",
+                        desc: "광고비 대비 매출 효율",
+                        feedback: getFeedback("ROAS"),
+                    },
+                ];
+                const weakSteps = funnelFeedbacks.filter((item) => item.feedback?.status === "weak");
+                return (<div className="space-y-5">
+                    {/* 퍼널 전환 지표 */}
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-[11px] font-bold text-slate-400">
+                            퍼널 전환 지표
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            클릭 → 찜 → 장바구니 → 구매 흐름 기준
+                          </p>
+                        </div>
 
-                    <div className="flex items-stretch gap-3">
-                      {funnelFeedbacks.map((item, index) => {
-                    const meta = getStatusMeta(item.feedback?.status);
-                    return (<div key={item.metric} className="flex items-center gap-3 flex-1">
-                            <div className={`relative flex-1 rounded-xl border p-4 transition ${meta.card}`}>
+                        <div className="flex items-stretch gap-3">
+                          {funnelFeedbacks.map((item, index) => {
+                        const meta = getStatusMeta(item.feedback?.status);
+                        return (<div key={item.metric} className="flex items-center gap-3 flex-1">
+                                <div className={`relative flex-1 rounded-xl border p-4 transition ${meta.card}`}>
 
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full ${meta.dot}`}/>
-                                  <p className={`text-sm font-bold ${meta.title}`}>
-                                    {item.step}
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`w-2 h-2 rounded-full ${meta.dot}`}/>
+                                      <p className={`text-sm font-bold ${meta.title}`}>
+                                        {item.step}
+                                      </p>
+                                    </div>
+
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${meta.badge}`}>
+                                      {meta.label}
+                                    </span>
+                                  </div>
+
+                                  <p className="text-[11px] text-slate-400 font-semibold mb-1">
+                                    {item.metric}
+                                  </p>
+
+                                  <p className="text-[10px] text-slate-400 mb-2">
+                                    {item.desc}
+                                  </p>
+
+                                  <p className={`text-xs leading-relaxed font-medium ${meta.text}`}>
+                                    {item.feedback?.text}
                                   </p>
                                 </div>
 
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${meta.badge}`}>
-                                  {meta.label}
-                                </span>
-                              </div>
-
-                              <p className="text-[11px] text-slate-400 font-semibold mb-1">
-                                {item.metric}
-                              </p>
-
-                              <p className="text-[10px] text-slate-400 mb-2">
-                                {item.desc}
-                              </p>
-
-                              <p className={`text-xs leading-relaxed font-medium ${meta.text}`}>
-                                {item.feedback?.text}
-                              </p>
-                            </div>
-
-                            {index < funnelFeedbacks.length - 1 && (<div className="flex-shrink-0 flex items-center">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="2.5">
-                                  <polyline points="9 18 15 12 9 6"/>
-                                </svg>
-                              </div>)}
-                          </div>);
-                })}
+                                {index < funnelFeedbacks.length - 1 && (<div className="flex-shrink-0 flex items-center">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="2.5">
+                                      <polyline points="9 18 15 12 9 6"/>
+                                    </svg>
+                                  </div>)}
+                              </div>);
+                    })}
+                        </div>
                     </div>
-                  </div>
 
-                  {/* 병목 요약 */}
-                  <div className={`rounded-xl border px-4 py-3 ${weakSteps.length > 0
+                    {/* 병목 요약 */}
+                    <div className={`rounded-xl border px-4 py-3 ${weakSteps.length > 0
                     ? "bg-amber-50 border-amber-200"
                     : "bg-blue-50 border-blue-100"}`}>
-                    <div className="flex items-start gap-2.5">
-                      <span className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${weakSteps.length > 0
+                        <div className="flex items-start gap-2.5">
+                          <span className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${weakSteps.length > 0
                     ? "bg-amber-100 text-amber-700"
                     : "bg-blue-100 text-blue-700"}`}>
-                        !
-                      </span>
+                            !
+                          </span>
 
-                      <p className={`text-xs leading-relaxed font-semibold ${weakSteps.length > 0
+                          <p className={`text-xs leading-relaxed font-semibold ${weakSteps.length > 0
                     ? "text-amber-800"
                     : "text-blue-700"}`}>
-                        {weakSteps.length > 0 ? (<>
-                            병목 감지:{" "}
-                            <strong>
-                              {weakSteps.map((item) => item.step).join(", ")}
-                            </strong>{" "}
-                            단계에서 상위 그룹 대비 낮은 전환 흐름이 확인됩니다.
-                          </>) : (<>
-                            현재 퍼널 흐름은 전반적으로 안정적이며, 급격한 이탈 구간은 크지 않습니다.
-                          </>)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* 광고·리스크 보조 지표 */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-[11px] font-bold text-slate-400">
-                        광고·리스크 보조 지표
-                      </p>
-                      <p className="text-[10px] text-slate-400">
-                        광고 확대 판단 시 함께 확인하는 지표
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      {riskFeedbacks.map((item) => {
-                    const meta = getStatusMeta(item.feedback?.status);
-                    return (<div key={item.metric} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <div className="flex items-start justify-between gap-3 mb-3">
-                              <div>
-                                <p className="text-sm font-bold text-slate-700">
-                                  {item.metric}
-                                </p>
-                                <p className="text-[11px] text-slate-400 mt-1">
-                                  {item.desc}
-                                </p>
-                              </div>
-
-                              <span className={`text-[10px] font-bold px-2 py-1 rounded-md border whitespace-nowrap ${meta.softBadge}`}>
-                                {meta.label}
+                            {weakSteps.length > 0 ? (
+                              <span>
+                                병목 감지: <strong>{weakSteps.map((item) => item.step).join(", ")}</strong> 단계에서 상위 그룹 대비 낮은 전환 흐름이 확인됩니다.
                               </span>
-                            </div>
-
-                            <p className="text-xs leading-relaxed font-medium text-slate-600">
-                              {item.feedback?.text}
-                            </p>
-                          </div>);
-                })}
+                            ) : (
+                              <span>
+                                현재 퍼널 흐름은 전반적으로 안정적이며, 급격한 이탈 구간은 크지 않습니다.
+                              </span>
+                            )}
+                          </p>
+                        </div>
                     </div>
-                  </div>
+
+                    {/* 광고·리스크 보조 지표 */}
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-[11px] font-bold text-slate-400">
+                            광고·리스크 보조 지표
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            광고 확대 판단 시 함께 확인하는 지표
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          {riskFeedbacks.map((item) => {
+                        const meta = getStatusMeta(item.feedback?.status);
+                        return (<div key={item.metric} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                  <div>
+                                    <p className="text-sm font-bold text-slate-700">
+                                      {item.metric}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 mt-1">
+                                      {item.desc}
+                                    </p>
+                                  </div>
+
+                                  <span className={`text-[10px] font-bold px-2 py-1 rounded-md border whitespace-nowrap ${meta.softBadge}`}>
+                                    {meta.label}
+                                  </span>
+                                </div>
+
+                                <p className="text-xs leading-relaxed font-medium text-slate-600">
+                                  {item.feedback?.text}
+                                </p>
+                              </div>);
+                    })}
+                        </div>
+                    </div>
                 </div>);
-        })()}
-          </div>
-
-          {/* 진단 근거 요약 + 추천 액션 */}
-          <div className="grid grid-cols-[0.9fr_1.1fr] gap-4">
-            <div className="bg-white rounded-xl border border-slate-100 p-5">
-              <div className="mb-3">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  진단 근거 요약
-                </p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  지표 해석 결과를 바탕으로 이 유형으로 분류된 이유를 요약합니다.
-                </p>
+            })()}
               </div>
 
-              <div className="space-y-2.5">
-                {bottleneckCauses.map((cause, i) => (<div key={i} className="flex items-start gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2.5">
-                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white border border-slate-200 text-[10px] font-bold text-slate-400 flex items-center justify-center">
-                      {i + 1}
-                    </span>
-
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      {cause}
+              {/* 진단 근거 요약 + 추천 액션 */}
+              <div className="grid grid-cols-[0.9fr_1.1fr] gap-4">
+                <div className="bg-white rounded-xl border border-slate-100 p-5">
+                  <div className="mb-3">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      진단 근거 요약
                     </p>
-                  </div>))}
-              </div>
-            </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      지표 해석 결과를 바탕으로 이 유형으로 분류된 이유를 요약합니다.
+                    </p>
+                  </div>
 
-            <div className="bg-blue-50/50 rounded-xl border border-blue-100 p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">
-                    추천 액션
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    이 상품의 진단 결과를 실제 운영에서 어떻게 적용할지 정리했습니다.
-                  </p>
+                  <div className="space-y-2.5">
+                    {bottleneckCauses.map((cause, i) => (<div key={i} className="flex items-start gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2.5">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white border border-slate-200 text-[10px] font-bold text-slate-400 flex items-center justify-center">
+                          {i + 1}
+                        </span>
+
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          {cause}
+                        </p>
+                      </div>))}
+                  </div>
                 </div>
 
-                <span className="text-[10px] font-bold text-blue-600 bg-white border border-blue-100 px-2 py-1 rounded-md">
-                  운영 가이드
-                </span>
-              </div>
+                <div className="bg-blue-50/50 rounded-xl border border-blue-100 p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+                        추천 액션
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        이 상품의 진단 결과를 실제 운영에서 어떻게 적용할지 정리했습니다.
+                      </p>
+                    </div>
 
-              <div className="space-y-2.5">
-                {actionItems.map((action) => (<div key={action.tag} className="flex items-start gap-3 bg-white rounded-lg border border-blue-100 px-3 py-2.5">
-                    <span className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md ${action.tag === "예산 테스트" || action.tag === "유지 운영" || action.tag === "전환 점검" || action.tag === "확대 보류"
-                ? "bg-blue-600 text-white"
-                : action.tag === "전환 보강" || action.tag === "소폭 개선" || action.tag === "구매 설득" || action.tag === "소재 점검"
-                    ? "bg-amber-100 text-amber-700"
-                    : action.tag === "중단 기준" || action.tag === "재검토 기준" || action.tag === "재집행" || action.tag === "재판단"
-                        ? "bg-slate-100 text-slate-600"
-                        : "bg-slate-100 text-slate-600"}`}>
-                      {action.tag}
+                    <span className="text-[10px] font-bold text-blue-600 bg-white border border-blue-100 px-2 py-1 rounded-md">
+                      운영 가이드
                     </span>
+                  </div>
 
-                    <p className="text-xs text-slate-700 leading-relaxed">
-                      {action.text}
-                    </p>
-                  </div>))}
+                  <div className="space-y-2.5">
+                    {actionItems.map((action) => (<div key={action.tag} className="flex items-start gap-3 bg-white rounded-lg border border-blue-100 px-3 py-2.5">
+                        <span className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md ${action.tag === "예산 테스트" || action.tag === "유지 운영" || action.tag === "전환 점검" || action.tag === "확대 보류"
+                    ? "bg-blue-600 text-white"
+                    : action.tag === "전환 보강" || action.tag === "소폭 개선" || action.tag === "구매 설득" || action.tag === "소재 점검"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-slate-100 text-slate-600"}`}>
+                          {action.tag}
+                        </span>
+
+                        <p className="text-xs text-slate-700 leading-relaxed">
+                          {action.text}
+                        </p>
+                      </div>))}
+                  </div>
+                </div>
               </div>
-            </div>
+
+              {/* 키워드별 실시간 고객 리뷰 및 점수별 색상·추천 문구 섹션 (안전 장치 추가 완료) */}
+              <div className="bg-white rounded-xl border border-slate-100 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      키워드별 고객 리뷰 분석 증거
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      최신 리뷰에서 추출한 키워드별 반응과 평점 평균입니다. (3점 미만: 빨강, 3~4점: 노랑, 4점 초과: 초록)
+                    </p>
+                  </div>
+                </div>
+
+                { !hasReviewData ? (
+                  <div className="bg-slate-50 rounded-lg p-6 text-center text-xs text-slate-400 border border-slate-100">
+                    수집된 키워드별 리뷰 데이터가 없습니다.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {Object.entries(reviewData).filter(([keyword, reviews]) => Array.isArray(reviews) && reviews.length > 0).map(([keyword, reviews]) => {
+                      const safeReviews = Array.isArray(reviews) ? reviews : [];
+                      const avgRating = safeReviews.length > 0 
+                        ? (safeReviews.reduce((acc, cur) => acc + (cur?.rating || 0), 0) / safeReviews.length).toFixed(1) 
+                        : 0;
+                      const numAvg = parseFloat(avgRating);
+
+                      const badgeColor = numAvg < 3 
+                        ? "bg-rose-50 text-rose-600 border-rose-200" 
+                        : numAvg <= 4 
+                          ? "bg-amber-50 text-amber-600 border-amber-200" 
+                          : "bg-emerald-50 text-emerald-600 border-emerald-200";
+
+                      let recommendationText = "";
+                      if (numAvg < 3) {
+                        recommendationText = `⚠️ '${keyword}' 관련 고객 불만이 감지되었습니다. 상세페이지의 상품 설명 보완이나 품질 개선이 시급합니다.`;
+                      } else if (numAvg <= 4) {
+                        recommendationText = `⚡ '${keyword}' 반응이 보통입니다. 고객 피드백을 참고하여 사소한 개선 포인트를 점검해보세요.`;
+                      } else {
+                        recommendationText = `✨ '${keyword}' 반응이 매우 우수합니다! 해당 소구를 마케팅 포인트나 상세페이지 상단에 적극 활용하세요.`;
+                      }
+
+                      return (
+                        <div key={keyword} className="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              🏷️ #{keyword} <span className="text-[10px] font-normal text-slate-400">({safeReviews.length}개 리뷰)</span>
+                            </span>
+                            <span className={`text-xs px-2.5 py-0.5 rounded-full border font-bold ${badgeColor}`}>
+                              평점 평균: {avgRating}점
+                            </span>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-2.5 mb-3 border border-slate-200/60 text-[11px] font-medium text-slate-600 shadow-2xs">
+                            💡 {recommendationText}
+                          </div>
+
+                          <div className="space-y-2">
+                            {safeReviews.length > 0 ? (
+                              safeReviews.map((r, idx) => (
+                                <div key={idx} className="bg-white rounded-lg p-3 border border-slate-100 text-xs shadow-2xs">
+                                  <div className="flex items-center justify-between mb-1 text-[10px] text-slate-400">
+                                    <span>⭐ {r?.rating ?? 0}점</span>
+                                    <span>{r?.date_created ? new Date(r.date_created).toLocaleDateString() : ''}</span>
+                                  </div>
+                                  <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                    {r?.contents || "내용 없음"}
+                                  </p>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-[11px] text-slate-400 py-1">이 키워드와 매칭된 리뷰가 없습니다.</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
             </div>
 
+            {/* Modal footer */}
+            <div className="flex-shrink-0 flex items-center justify-start px-7 py-4 border-t border-slate-100 bg-slate-50/60">
+              <button onClick={() => {
+                onClose();
+                setScreen("basis");
+            }} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                진단 기준 보기
+              </button>
+            </div>
           </div>
-
-          {/* Modal footer */}
-          <div className="flex-shrink-0 flex items-center justify-start px-7 py-4 border-t border-slate-100 bg-slate-50/60">
-          <button onClick={() => {
-            onClose();
-            setScreen("basis");
-        }} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            진단 기준 보기
-          </button>
         </div>
-      </div>
-    </div>);
+    );
 }

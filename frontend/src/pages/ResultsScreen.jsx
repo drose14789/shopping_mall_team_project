@@ -61,16 +61,25 @@ console.log("백엔드에서 받아온 원본 데이터:", resultsData);
     }));
 
     const filtered = mappedData;
+
+    const totalCount = filtered.length;
+    const expandCount = filtered.filter(
+        item => Number(item.total_score) >= 90
+    ).length;
+
+    const improveCount = filtered.filter(item => {
+        const score = Number(item.total_score);
+        return score >= 65 && score < 90;
+    }).length;
+
+    const reduceCount = filtered.filter(
+        item => Number(item.total_score) < 65
+    ).length;
+
     const totalPages = Math.max(1, Math.ceil(filtered.length / RESULTS_PAGE_SIZE));
     const paged = filtered.slice(page * RESULTS_PAGE_SIZE, (page + 1) * RESULTS_PAGE_SIZE);
     const pageStart = filtered.length === 0 ? 0 : page * RESULTS_PAGE_SIZE + 1;
     const pageEnd = Math.min((page + 1) * RESULTS_PAGE_SIZE, filtered.length);
-
-    // 요약 카드 개수 동적 계산
-    const totalCount = filtered.length;
-    const expandCount = filtered.filter(row => getDiagnosisType(row).includes("확대")).length;
-    const improveCount = filtered.filter(row => getDiagnosisType(row).includes("개선")).length;
-    const reduceCount = filtered.filter(row => getDiagnosisType(row).includes("축소") || getDiagnosisType(row).includes("보류")).length;
 
     return (
         <div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-4">

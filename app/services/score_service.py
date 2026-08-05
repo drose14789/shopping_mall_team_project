@@ -147,7 +147,10 @@ def ensure_evaluation_table_exists(engine):
             -- 분석 시간
             analysis_start_time VARCHAR(20),
             analysis_end_time VARCHAR(20),
-            created_at DATETIME
+            created_at DATETIME,
+
+            -- 리뷰
+            matched_reviews TEXT
         )
     """)
 
@@ -506,6 +509,7 @@ def evaluate_single_excel_file(
         file_results.append({
             'row_index': idx + 2,
             'product_name': product_name_val,
+            'product_id': product_id,
             'category': category_name,
             'season': quarter_val,
             'total_score': total_score,

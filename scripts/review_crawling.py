@@ -36,7 +36,7 @@ def fetch_zigzag_reviews(product_id, cursor=None):
         "variables": {
             "input": {
                 "product_id": str(product_id),
-                "order": "RATING_DESC",
+                "order": "DATE_CREATED_DESC",
                 "cursor": {"end_cursor": cursor, "limit_count": 20}
             }
         },
@@ -98,7 +98,7 @@ def run_pipeline(product_id):
     next_cursor = None
     total_collected = 0
 
-    while total_collected < 60:
+    while total_collected < 140:
         data = fetch_zigzag_reviews(product_id, next_cursor)
         print("--- 서버 응답 데이터 ---")
         print(data)
