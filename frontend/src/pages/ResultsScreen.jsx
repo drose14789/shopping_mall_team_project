@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { RESULTS_PAGE_SIZE, recommendationMap } from "../constants/data"; 
-import { getDiagnosisType, getRecommendedAction, actionBadge, getClientUuid } from "../utils/helpers";
+import { getDiagnosisType, getClientUuid } from "../utils/helpers";
 import { ProductDetailModal } from "../components/InspectionModal";
 
 export default function ResultsScreen({ setScreen, selectedFile }) {
@@ -9,56 +9,89 @@ export default function ResultsScreen({ setScreen, selectedFile }) {
     const [resultsData, setResultsData] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // 실제 백엔드 DB에서 데이터를 불러오는 useEffect (필요에 따라 엔드포인트 URL 조정)
-useEffect(() => {
-    const client_uuid = getClientUuid();
-
-    if (!client_uuid || !selectedFile) {
-        console.error("파일 정보 없음");
-        setLoading(false);
-        return;
-    }
-
-    fetch(`http://localhost:8000/score/results?client_uuid=${client_uuid}&file_name=${encodeURIComponent(selectedFile)}`)
-        .then(res => {
+    useEffect(() => {
+        setLoading(true);
+      
+        const client_uuid = getClientUuid();
+      
+        if (!client_uuid || !selectedFile) {
+          console.error("파일 정보 없음");
+          setResultsData([]);
+          setLoading(false);
+          return;
+        }
+      
+        fetch(
+          `http://localhost:8000/score/results?client_uuid=${client_uuid}&file_name=${encodeURIComponent(
+            selectedFile
+          )}`
+        )
+          .then((res) => {
             if (!res.ok) {
-                throw new Error("결과 데이터를 가져오는데 실패했습니다.");
+              throw new Error("결과 데이터를 가져오는데 실패했습니다.");
             }
+      
             return res.json();
-        })
-        .then(data => {
-            const list = Array.isArray(data)
-                ? data
-                : (data.results || []);
-
-            setResultsData(list);
-
+          })
+          .then((data) => {
+            const list = Array.isArray(data) ? data : data.results || [];
+      
             console.log("🔥 백엔드에서 받아온 실제 데이터:", list);
-
-            if (list.length > 0) {
-                console.log("✨ 첫 번째 데이터 구조:", list[0]);
-            }
-
+      
+            setResultsData(list);
             setLoading(false);
-        })
-        .catch(err => {
+          })
+          .catch((err) => {
             console.error("❌ 데이터를 불러오는 중 에러 발생:", err);
+            setResultsData([]);
             setLoading(false);
-        });
-}, [selectedFile]);
+          });
+      }, [selectedFile]);
 
 console.log("백엔드에서 받아온 원본 데이터:", resultsData);
     
     const rawList = Array.isArray(resultsData) 
         ? resultsData : (resultsData?.results || []);
 
-    const mappedData = rawList.map(item => ({
-        ...item,
-        name: item.product_name,
-        cat: item.category,
-        type : item.product_type || "일반",
-        reason: item.reason || `ROAS ${item.calc_roas?.toFixed(1) ?? 0}, 총점 ${item.total_score?.toFixed(1) ?? 0}`
-    }));
+        const mappedData = rawList.map((item) => ({
+            ...item,
+            name: item.product_name || "-",
+            cat: item.category || "-",
+            type: item.product_type || "일반",
+            reason:
+              item.reason ||
+              `ROAS ${item.calc_roas?.toFixed?.(1) ?? 0}, 총점 ${
+                item.total_score?.toFixed?.(1) ?? 0
+              }`,
+          }));
+
+          function getDiagnosisBadgeStyle(type = "") {
+            if (type.includes("핵심") || type.includes("확대")) {
+              return "bg-blue-50 text-blue-700 border-blue-200";
+            }
+          
+            if (type.includes("숨은") || type.includes("효율")) {
+              return "bg-cyan-50 text-cyan-700 border-cyan-200";
+            }
+          
+            if (type.includes("상세") || type.includes("개선")) {
+              return "bg-amber-50 text-amber-700 border-amber-200";
+            }
+          
+            if (type.includes("이탈") || type.includes("전환")) {
+              return "bg-orange-50 text-orange-700 border-orange-200";
+            }
+          
+            if (type.includes("반품") || type.includes("리스크")) {
+              return "bg-purple-50 text-purple-700 border-purple-200";
+            }
+          
+            if (type.includes("축소") || type.includes("보류") || type.includes("부족")) {
+              return "bg-rose-50 text-rose-700 border-rose-200";
+            }
+          
+            return "bg-slate-50 text-slate-600 border-slate-200";
+          }
 
     const filtered = mappedData;
     const totalPages = Math.max(1, Math.ceil(filtered.length / RESULTS_PAGE_SIZE));
@@ -187,64 +220,104 @@ console.log("백엔드에서 받아온 원본 데이터:", resultsData);
                         </p>
                     </div>
                 ) : (
-                    <table className="w-full">
-                        <thead>
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[1180px] table-fixed">
+                            <thead>
                             <tr className="bg-slate-50">
-                                {[
-                                    "상품명",
-                                    "카테고리",
-                                    "진단 유형",
-                                    "추천 액션",
-                                    "주요 근거",
-                                    "상세 진단",
-                                ].map((h) => (
-                                    <th key={h} className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-5 py-3">
-                                        {h}
-                                    </th>
-                                ))}
+                                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-5 py-3 w-[34%]">
+                                상품명
+                                </th>
+                                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-5 py-3 w-[13%]">
+                                카테고리
+                                </th>
+                                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-5 py-3 w-[13%]">
+                                진단 유형
+                                </th>
+                                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-5 py-3 w-[24%]">
+                                추천 액션
+                                </th>
+                                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-5 py-3 w-[10%]">
+                                주요 근거
+                                </th>
+                                <th className="text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-5 py-3 w-[110px] sticky right-0 bg-slate-50 z-10 border-l border-slate-100">
+                                상세 진단
+                                </th>
                             </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
+                            </thead>
+
+                            <tbody className="divide-y divide-slate-50">
                             {paged.map((row, idx) => {
                                 const diagnosisType = getDiagnosisType(row);
-                                const recommendedAction = getRecommendedAction(row);
+
                                 return (
-                                    <tr key={row.id || idx} className="hover:bg-slate-50/70 transition-colors">
-                                        <td className="px-5 py-3 text-xs font-medium text-slate-700 whitespace-nowrap">
-                                            {row.name}
-                                        </td>
+                                <tr key={row.id || idx} className="hover:bg-slate-50/70 transition-colors">
+                                    <td className="px-5 py-3 text-xs font-medium text-slate-700 align-top">
+                                    <p
+                                        className="leading-5 overflow-hidden"
+                                        style={{
+                                        display: "-webkit-box",
+                                        WebkitLineClamp: 2,
+                                        WebkitBoxOrient: "vertical",
+                                        }}
+                                        title={row.name}
+                                    >
+                                        {row.name}
+                                    </p>
+                                    </td>
 
-                                        <td className="px-5 py-3 text-xs text-slate-500 whitespace-nowrap">
-                                            {row.cat}
-                                        </td>
+                                    <td className="px-5 py-3 text-xs text-slate-500 align-top">
+                                    <p className="truncate" title={row.cat}>
+                                        {row.cat}
+                                    </p>
+                                    </td>
 
-                                        <td className="px-5 py-3">
-                                            <span className={`text-xs px-2 py-1 rounded-md border font-medium whitespace-nowrap ${actionBadge(diagnosisType)}`}>
-                                                {row.type}
-                                            </span>
-                                        </td>
+                                    <td className="px-5 py-3 align-top">
+                                    <span
+                                        className={`inline-flex items-center text-xs px-2.5 py-1 rounded-full border font-semibold whitespace-nowrap ${getDiagnosisBadgeStyle(
+                                        row.type
+                                        )}`}
+                                    >
+                                        {row.type}
+                                    </span>
+                                    </td>
 
-                                        <td className="px-5 py-3 text-xs text-slate-600 font-semibold whitespace-nowrap">
-                                            {recommendationMap[row.type] || "상품 상태를 점검해 주세요."}
-                                        </td>
+                                    <td className="px-5 py-3 text-xs text-slate-600 font-semibold align-top">
+                                    <p
+                                        className="leading-5 overflow-hidden"
+                                        style={{
+                                        display: "-webkit-box",
+                                        WebkitLineClamp: 2,
+                                        WebkitBoxOrient: "vertical",
+                                        }}
+                                        title={recommendationMap[row.type] || "상품 상태를 점검해 주세요."}
+                                    >
+                                        {recommendationMap[row.type] || "상품 상태를 점검해 주세요."}
+                                    </p>
+                                    </td>
 
-                                        <td className="px-5 py-3 text-xs text-slate-500 max-w-[240px] truncate">
-                                            {row.reason}
-                                        </td>
+                                    <td className="px-5 py-3 text-xs text-slate-500 align-top">
+                                    <p className="truncate" title={row.reason}>
+                                        {row.reason}
+                                    </p>
+                                    </td>
 
-                                        <td className="px-5 py-3">
-                                            <button onClick={() => setSelectedProduct(row)} className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 transition px-2.5 py-1.5 rounded-lg hover:bg-blue-50 whitespace-nowrap">
-                                                상세 보기
-                                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                                    <polyline points="9 18 15 12 9 6"/>
-                                                </svg>
-                                            </button>
-                                        </td>
-                                    </tr>
+                                    <td className="px-5 py-3 text-center sticky right-0 bg-white border-l border-slate-100 align-top">
+                                    <button
+                                        onClick={() => setSelectedProduct(row)}
+                                        className="inline-flex items-center justify-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 transition px-2.5 py-1.5 rounded-lg hover:bg-blue-50 whitespace-nowrap border border-blue-100 bg-blue-50/60"
+                                    >
+                                        상세 보기
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <polyline points="9 18 15 12 9 6" />
+                                        </svg>
+                                    </button>
+                                    </td>
+                                </tr>
                                 );
                             })}
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                        </div>
                 )}
 
                 {/* Pagination */}

@@ -275,6 +275,75 @@ function getRepresentativeFromSummaryRows(rows) {
   };
 }
 
+function getCategoryRoot(category) {
+  return String(category || "").split(">")[0].trim();
+}
+
+function isSameCategoryFamily(rowCategory, selectedCategory) {
+  const row = String(rowCategory || "").trim();
+  const selected = String(selectedCategory || "").trim();
+
+  if (!row || !selected) return false;
+
+  const selectedRoot = getCategoryRoot(selected);
+
+  return row === selected || row.startsWith(`${selectedRoot}>`) || row === selectedRoot;
+}
+
+
+function getWeightedAverage(rows, key) {
+  const validRows = rows.filter((row) => row.metricScores?.[key] !== undefined);
+
+  const totalWeight = validRows.reduce(
+    (sum, row) => sum + Math.max(1, toNumber(row.sampleCount)),
+    0
+  );
+
+  if (totalWeight === 0) return 0;
+
+  return Math.round(
+    validRows.reduce((sum, row) => {
+      const weight = Math.max(1, toNumber(row.sampleCount));
+      return sum + toNumber(row.metricScores[key]) * weight;
+    }, 0) / totalWeight
+  );
+}
+
+function buildSeasonFamilySummary(rows, selectedCategory) {
+  const categoryRoot = getCategoryRoot(selectedCategory);
+
+  const sampleCount = rows.reduce(
+    (sum, row) => sum + toNumber(row.sampleCount),
+    0
+  );
+
+  const metricScores = {
+    clickScore: getWeightedAverage(rows, "clickScore"),
+    wishScore: getWeightedAverage(rows, "wishScore"),
+    cartScore: getWeightedAverage(rows, "cartScore"),
+    purchaseScore: getWeightedAverage(rows, "purchaseScore"),
+    returnStabilityScore: getWeightedAverage(rows, "returnStabilityScore"),
+    roasScore: getWeightedAverage(rows, "roasScore"),
+  };
+
+  const fitScore = Math.round(
+    (metricScores.clickScore +
+      metricScores.wishScore +
+      metricScores.cartScore +
+      metricScores.purchaseScore +
+      metricScores.returnStabilityScore +
+      metricScores.roasScore) /
+      6
+  );
+
+  return {
+    category: `${categoryRoot} 계열 전체`,
+    sampleCount,
+    metricScores,
+    fitScore,
+  };
+}
+
 function calculatePreSaleDiagnosis({ season, category }) {
   const summaryRows = getSummaryRows();
 
@@ -387,42 +456,63 @@ function calculatePreSaleDiagnosis({ season, category }) {
       allMetricAverage.roasScore
     );
 
+  
     const selectedExactSummary = exactRows[0] || null;
 
-const sameCategorySeasonRows = summaryRows
-  .filter((row) => row.category === category)
-  .sort((a, b) => {
-    const seasonDiff =
-      SEASON_ORDER.indexOf(a.season) - SEASON_ORDER.indexOf(b.season);
+const selectedCombination = selectedExactSummary
+  ? {
+      label: "선택한 조합",
+      season: selectedExactSummary.season,
+      category: selectedExactSummary.category,
+      sampleCount: selectedExactSummary.sampleCount,
+      fitScore: selectedExactSummary.fitScore,
+      metricScores: selectedExactSummary.metricScores,
+    }
+  : {
+      label: "선택한 조합",
+      season,
+      category,
+      sampleCount: representative.sampleCount,
+      fitScore: representative.fitScore,
+      metricScores: representative.metricScores,
+    };
 
-    if (seasonDiff !== 0) return seasonDiff;
+const sameCategoryFamilyRows = summaryRows.filter((row) =>
+  isSameCategoryFamily(row.category, category)
+);
 
-    return b.fitScore - a.fitScore;
-  });
+const seasonFamilyRows = SEASON_ORDER.map((seasonName) => {
+  const rowsInSeason = sameCategoryFamilyRows.filter(
+    (row) => row.season === seasonName
+  );
 
-const compareCombinations =
-  sameCategorySeasonRows.length > 0
-    ? sameCategorySeasonRows.map((combo) => ({
-        label:
-          combo.season === season && combo.category === category
-            ? "선택한 조합"
-            : "같은 카테고리 다른 시즌",
-        season: combo.season,
-        category: combo.category,
-        sampleCount: combo.sampleCount,
-        fitScore: combo.fitScore,
-        metricScores: combo.metricScores,
-      }))
-    : [
-        {
-          label: "선택한 조합",
-          season,
-          category,
-          sampleCount: representative.sampleCount,
-          fitScore: representative.fitScore,
-          metricScores: representative.metricScores,
-        },
-      ];
+  if (rowsInSeason.length === 0) return null;
+
+  const summary = buildSeasonFamilySummary(rowsInSeason, category);
+
+  return {
+    label:
+      seasonName === season
+        ? "선택 시즌 계열 평균"
+        : "다른 시즌 계열 평균",
+    season: seasonName,
+    category: summary.category,
+    sampleCount: summary.sampleCount,
+    fitScore: summary.fitScore,
+    metricScores: summary.metricScores,
+  };
+}).filter(Boolean);
+
+const compareCombinations = [
+  selectedCombination,
+  ...seasonFamilyRows.filter(
+    (combo) =>
+      !(
+        combo.season === selectedCombination.season &&
+        combo.category === selectedCombination.category
+      )
+  ),
+];
 
   return {
     ok: true,
@@ -483,7 +573,7 @@ const compareCombinations =
         description: purchaseCompare.description,
       },
       {
-        label: "반품 안정성",
+        label: "반품 안정성(데이터 기준)",
         catAvg: `${representative.metricScores.returnStabilityScore}점`,
         allAvg: `${allMetricAverage.returnStabilityScore}점`,
         good: returnCompare.good,
@@ -1129,16 +1219,24 @@ export default function DiagScreen({ setScreen, }) {
                       </tr>))}
                   </tbody>
                 </table>
+                <div className="px-5 py-3 border-t border-slate-100 bg-slate-50">
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  반품 안정성은 반품건수와 주문수를 기준으로 계산한 값이며,
+                  반품 데이터가 0건으로 기록된 상품이 많을 경우 높게 표시될 수 있습니다.
+                </p>
               </div>
+            </div>
+
+            
 
               {/* Selected combination comparison */}
               <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-100">
                 <h3 className="font-semibold text-slate-800 text-sm">
-                  같은 카테고리 시즌별 비교
+                같은 카테고리 계열 시즌별 비교
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  사용자가 선택한 카테고리를 기준으로 시즌별 적합도와 세부 지표를 비교합니다.
+                사용자가 선택한 조합과 같은 카테고리 계열의 시즌별 평균 지표를 비교합니다.
                 </p>
                 </div>
 
@@ -1155,7 +1253,7 @@ export default function DiagScreen({ setScreen, }) {
                         "찜",
                         "장바구니",
                         "구매",
-                        "반품",
+                        "반품 안정성",
                         "ROAS",
                       ].map((h) => (
                         <th

@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import {UploadIllustration} from '../components/common/Icons'; 
-import * as AllData from '../constants/data';
 import * as XLSX from "xlsx";
 import { getClientUuid } from "../utils/helpers";
 
@@ -120,15 +119,6 @@ function cleanNumber(value) {
     .replace(/%/g, "")
     .replace(/\s/g, "");
 
-  // 28.500 같은 값은 소수점인지 천 단위인지 애매해서 확인 필요 처리
-  if (/^\d+\.\d{3}$/.test(cleaned)) {
-    return {
-      type: "need_check",
-      value: raw,
-      cleanedValue: cleaned,
-      message: "소수점인지 천 단위 구분인지 애매한 값입니다.",
-    };
-  }
 
   const num = Number(cleaned);
 
@@ -326,6 +316,7 @@ const COLUMN_ALIASES = {
 
 const OPTIONAL_ALIASES = {
   카테고리: ["카테고리", "카테고리(3>4차)", "카테고리명", "상품 카테고리"],
+  상품단가: ["상품단가", "상품 단가", "판매가", "단가", "price", "unit_price"],
   이미지URL: ["이미지URL", "이미지 URL", "이미지url"],
   상품등록일: ["상품등록일", "상품 등록일"],
   배송유형: ["배송유형", "배송 유형"],
@@ -337,6 +328,31 @@ const OPTIONAL_ALIASES = {
   반품률: ["반품률"],
   주문수량: ["주문수량", "주문 수량"],
 };
+
+const REFERENCE_ONLY_COLUMNS = [
+  "이미지URL",
+  "이미지 URL",
+  "이미지url",
+  "상품등록일",
+  "상품 등록일",
+  "배송유형",
+  "배송 유형",
+  "광고전환지수",
+  "광고 전환 지수",
+  "광고비 비중",
+  "광고비비중",
+  "광고 비중",
+  "주문수량",
+  "주문 수량",
+];
+
+function isReferenceOnlyColumnName(header) {
+  const normalizedHeader = normalizeColumnName(header);
+
+  return REFERENCE_ONLY_COLUMNS.some(
+    (name) => normalizeColumnName(name) === normalizedHeader
+  );
+}
 
 function normalizeColumnName(value) {
   return String(value || "")
@@ -610,9 +626,13 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
   );
 
   const referenceColumns = headers.filter((header) => {
+    // 원래 분석에 쓰지 않는 컬럼은 매핑 여부와 상관없이 참고 처리
+    if (isReferenceOnlyColumnName(header)) return true;
+  
+    // 어떤 필수/보조 컬럼에도 매핑되지 않은 원본 컬럼도 참고 처리
     return !mappedActualColumns.has(header);
   });
-
+  
   referenceColumns.forEach((col) => {
     issues.push(
       makeIssue({
@@ -625,7 +645,7 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
       })
     );
   });
-
+  let computedUnitPriceCount = 0;
   const cleanedRows = rawRows.map((row, idx) => {
     const excelRowIndex = row.__rowIndex ?? headerRowIndex + idx + 2;
     const cleanedRow = { ...row };
@@ -634,10 +654,12 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
 
     requiredCols.forEach((col) => {
       if (col === "판매 사이트") return;
+      if (col === "상품명") return;
+      if (col === "카테고리") return;
       if (!columnMap[col]) return;
-
+    
       const value = normalizeValue(row[col]);
-
+    
       if (value === "") {
         issues.push(
           makeIssue({
@@ -695,11 +717,29 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
     const returnCount = getCleanNumber(cleanedRow, "반품건수");
     const adCost = getCleanNumber(cleanedRow, "광고과금액");
     const orderAmount = getCleanNumber(cleanedRow, "주문금액");
+    const rawUnitPrice = normalizeValue(cleanedRow["상품단가"]);
+    const unitPriceResult = rawUnitPrice ? cleanNumber(rawUnitPrice) : null;
+
+    const hasValidOriginalUnitPrice =
+      unitPriceResult &&
+      unitPriceResult.type !== "need_check" &&
+      Number(unitPriceResult.cleanedValue) > 0;
+
+    const unitPrice = hasValidOriginalUnitPrice
+      ? Number(unitPriceResult.cleanedValue)
+      : orderCount > 0
+        ? Math.round(orderAmount / orderCount)
+        : 0;
+    
+    if (!hasValidOriginalUnitPrice) {
+      computedUnitPriceCount += 1;
+    }
 
     cleanedRow["분석 시작월"] = startMonth;
     cleanedRow["분석 종료월"] = endMonth;
     cleanedRow["분석 시즌"] = season;
     cleanedRow["판매 사이트"] = cleanedRow["판매 사이트"] || "지그재그";
+    cleanedRow["상품단가"] = unitPrice;
 
     cleanedRow["클릭률"] = safeRate(click, exposure);
     cleanedRow["찜 관심도"] = safeRate(wish, visit);
@@ -763,24 +803,7 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
     return cleanedRow;
   });
 
-  const autoCleanCount = issues.filter((i) => i.type === "auto_cleaned").length;
-  const needCheckCount = issues.filter((i) => i.type === "need_check").length;
-  const requiredErrorCount = issues.filter((i) => i.type === "required_error").length;
-  const referenceCount = issues.filter((i) => i.type === "reference").length;
-
-  const OUTPUT_COL_ORDER = [
-    "상품ID",
-    "상품명",
-    "노출수",
-    "클릭수",
-    "광고과금액",
-    "주문금액",
-    "상품 상세 방문수",
-    "찜 유저수",
-    "장바구니 유저수",
-    "상품주문수",
-    "반품건수",
-    "판매 사이트",
+  const generatedColumns = [
     "분석 시작월",
     "분석 종료월",
     "분석 시즌",
@@ -792,13 +815,204 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
     "ROAS",
   ];
   
-  const extraCols = Object.keys(cleanedRows[0] || {}).filter(
+  if (!columnMap["판매 사이트"]) {
+    generatedColumns.unshift("판매 사이트");
+  }
+  
+  if (!columnMap["상품단가"] || computedUnitPriceCount > 0) {
+    generatedColumns.unshift("상품단가");
+  }
+  
+  const generatedColumnMessages = {
+    "판매 사이트": "원본 파일에 판매 사이트 컬럼이 없어 기본값 '지그재그'로 자동 보완했습니다.",
+    "상품단가": "상품단가가 없거나 비어 있어 주문금액 ÷ 상품주문수로 자동 계산했습니다.",
+    "분석 시작월": "사용자가 선택한 분석 시작월을 기준으로 자동 생성했습니다.",
+    "분석 종료월": "사용자가 선택한 분석 종료월을 기준으로 자동 생성했습니다.",
+    "분석 시즌": "분석 기간을 기준으로 시즌을 자동 분류했습니다.",
+    "클릭률": "노출수와 클릭수를 기준으로 자동 계산했습니다.",
+    "찜 관심도": "찜 유저수와 상품 상세 방문수를 기준으로 자동 계산했습니다.",
+    "장바구니 전환율": "장바구니 유저수와 상품 상세 방문수를 기준으로 자동 계산했습니다.",
+    "구매전환율": "상품주문수와 상품 상세 방문수를 기준으로 자동 계산했습니다.",
+    "반품률": "반품건수와 상품주문수를 기준으로 자동 계산했습니다.",
+    "ROAS": "주문금액과 광고과금액을 기준으로 자동 계산했습니다.",
+  };
+  
+  generatedColumns.forEach((col) => {
+    const alreadyExists = issues.some(
+      (issue) =>
+        issue.type === "auto_cleaned" &&
+        issue.rowIndex === "전체" &&
+        issue.column === col
+    );
+  
+    if (alreadyExists) return;
+  
+    issues.unshift(
+      makeIssue({
+        type: "auto_cleaned",
+        rowIndex: "전체",
+        column: col,
+        originalValue: "자동 생성",
+        cleanedValue: "생성 완료",
+        message: generatedColumnMessages[col] || "분석을 위해 자동 생성한 컬럼입니다.",
+      })
+    );
+  });
+
+  const autoCleanCount = issues.filter((i) => i.type === "auto_cleaned").length;
+  const needCheckCount = issues.filter((i) => i.type === "need_check").length;
+  const requiredErrorCount = issues.filter((i) => i.type === "required_error").length;
+  const referenceCount = issues.filter((i) => i.type === "reference").length;
+
+  const OUTPUT_COL_ORDER = [
+    "상품ID",
+    "상품명",
+    "카테고리",
+    "분석 시즌",
+    "노출수",
+    "클릭수",
+    "상품 상세 방문수",
+    "찜 유저수",
+    "장바구니 유저수",
+    "상품주문수",
+    "반품건수",
+    "광고과금액",
+    "주문금액",
+    "상품단가",
+    "분석 시작월",
+    "분석 종료월",
+    "판매 사이트",
+    "클릭률",
+    "찜 관심도",
+    "장바구니 전환율",
+    "구매전환율",
+    "반품률",
+    "ROAS",
+  ];
+
+  const BACKEND_REQUIRED_COLS = [
+    "상품명",
+    "카테고리",
+    "분석 시즌",
+    "노출수",
+    "클릭수",
+    "상품 상세 방문수",
+    "찜 유저수",
+    "장바구니 유저수",
+    "상품주문수",
+    "반품건수",
+    "광고과금액",
+    "주문금액",
+    "상품단가",
+    "분석 시작월",
+    "분석 종료월",
+  ];
+  
+  const BACKEND_NUMERIC_COLS = [
+    "노출수",
+    "클릭수",
+    "상품 상세 방문수",
+    "찜 유저수",
+    "장바구니 유저수",
+    "상품주문수",
+    "반품건수",
+    "광고과금액",
+    "주문금액",
+    "상품단가",
+  ];
+  
+  const exportRows = cleanedRows.map((row) => {
+    const nextRow = { ...row };
+  
+    // 상품명: 백엔드 필수 문자열
+    if (
+      nextRow["상품명"] === undefined ||
+      nextRow["상품명"] === null ||
+      String(nextRow["상품명"]).trim() === ""
+    ) {
+      nextRow["상품명"] = `상품명 미입력_${
+        nextRow["상품ID"] || nextRow.__rowIndex || ""
+      }`;
+    }
+  
+    // 카테고리: 백엔드 필수 문자열
+    if (
+      nextRow["카테고리"] === undefined ||
+      nextRow["카테고리"] === null ||
+      String(nextRow["카테고리"]).trim() === ""
+    ) {
+      nextRow["카테고리"] = "기타";
+    }
+  
+    // 분석 시즌/기간: 백엔드 필수 문자열
+    nextRow["분석 시즌"] = nextRow["분석 시즌"] || season || "";
+    nextRow["분석 시작월"] = nextRow["분석 시작월"] || startMonth || "";
+    nextRow["분석 종료월"] = nextRow["분석 종료월"] || endMonth || "";
+  
+    // 판매 사이트는 스키마 필수는 아니지만 DB/이력용으로 유지
+    nextRow["판매 사이트"] = nextRow["판매 사이트"] || "지그재그";
+  
+    // 상품단가: 없으면 주문금액 / 상품주문수로 계산
+    const orderAmount = Number(nextRow["주문금액"] || 0);
+    const orderCount = Number(nextRow["상품주문수"] || 0);
+  
+    if (
+      nextRow["상품단가"] === undefined ||
+      nextRow["상품단가"] === null ||
+      nextRow["상품단가"] === "" ||
+      Number(nextRow["상품단가"]) <= 0
+    ) {
+      nextRow["상품단가"] =
+        orderCount > 0 ? Math.round(orderAmount / orderCount) : 0;
+    }
+  
+    // 백엔드 필수 숫자값 비어 있으면 0으로 보정
+    BACKEND_NUMERIC_COLS.forEach((col) => {
+      if (
+        nextRow[col] === undefined ||
+        nextRow[col] === null ||
+        nextRow[col] === ""
+      ) {
+        nextRow[col] = 0;
+      }
+    });
+  
+    // 백엔드 필수 문자값 비어 있으면 기본값 보정
+    BACKEND_REQUIRED_COLS.forEach((col) => {
+      if (
+        nextRow[col] === undefined ||
+        nextRow[col] === null ||
+        String(nextRow[col]).trim() === ""
+      ) {
+        if (BACKEND_NUMERIC_COLS.includes(col)) {
+          nextRow[col] = 0;
+        } else if (col === "상품명") {
+          nextRow[col] = `상품명 미입력_${
+            nextRow["상품ID"] || nextRow.__rowIndex || ""
+          }`;
+        } else if (col === "카테고리") {
+          nextRow[col] = "기타";
+        } else if (col === "분석 시즌") {
+          nextRow[col] = season || "";
+        } else if (col === "분석 시작월") {
+          nextRow[col] = startMonth || "";
+        } else if (col === "분석 종료월") {
+          nextRow[col] = endMonth || "";
+        }
+      }
+    });
+  
+    return nextRow;
+  });
+  
+  const extraCols = Object.keys(exportRows[0] || {}).filter(
     (col) => !OUTPUT_COL_ORDER.includes(col) && col !== "__rowIndex"
   );
   
-  const cleanedSheet = XLSX.utils.json_to_sheet(cleanedRows, {
+  const cleanedSheet = XLSX.utils.json_to_sheet(exportRows, {
     header: [...OUTPUT_COL_ORDER, ...extraCols],
   });
+
   const cleanedWorkbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(cleanedWorkbook, cleanedSheet, "검수_정제결과");
 
@@ -817,11 +1031,12 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
     headerRowIndex,
     headers: [...OUTPUT_COL_ORDER, ...extraCols],
     originalHeaders: headers,
-    rows: cleanedRows,
-    cleanedRows,
+    rows: exportRows,
+    cleanedRows: exportRows,
     issues,
     missingColumns,
     referenceColumns,
+    generatedColumns,
     columnMap,
     autoCleanCount,
     needCheckCount,
@@ -829,8 +1044,10 @@ async function inspectFile({ file, requiredCols, startMonth, endMonth, season })
     referenceCount,
     canAnalyze: requiredErrorCount === 0,
     cleanedFileUrl: URL.createObjectURL(blob),
-    cleanedFileName:
-    `${file.name.replace(/\.(xlsx|csv)$/i, "")}_분석완료_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    cleanedFileName: `${file.name.replace(
+      /\.(xlsx|csv)$/i,
+      ""
+    )}_분석완료_${new Date().toISOString().slice(0, 10)}.xlsx`,
   };
 }
 
@@ -1633,21 +1850,45 @@ function InspectionModal({ result, onClose, setScreen, setSelectedFile }) {
           body: formData,
         });
 
-        if (!apiResponse.ok) {
-          throw new Error("분석 요청에 실패했습니다.");
+        const responseText = await apiResponse.text();
+
+        let data = null;
+
+        try {
+          data = responseText ? JSON.parse(responseText) : null;
+        } catch (error) {
+          data = responseText;
         }
 
-        const data = await apiResponse.json();
+        if (!apiResponse.ok) {
+          console.error("분석 요청 실패:", {
+            status: apiResponse.status,
+            statusText: apiResponse.statusText,
+            data,
+          });
+
+          throw new Error(
+            typeof data === "string"
+              ? `분석 요청 실패: ${apiResponse.status} ${data}`
+              : `분석 요청 실패: ${apiResponse.status} ${
+                  data?.detail || apiResponse.statusText
+                }`
+          );
+        }
+
         console.log("분석 결과:", data);
 
-        // 필요시 결과 데이터를 부모 컴포넌트나 상태에 저장 후 화면 전환
-        // setAnalysisResult(data.results);
         setSelectedFile(result.cleanedFileName);
         setScreen("results");
 
+
       } catch (error) {
         console.error("에러 발생:", error);
-        alert("파일 분석 중 오류가 발생했습니다.");
+        alert(
+          `파일 분석 중 오류가 발생했습니다.\n\n${
+            error.message || "원인을 확인할 수 없습니다."
+          }`
+        );
       } finally {
         setIsAnalyzing(false);
       }
@@ -1656,10 +1897,17 @@ function InspectionModal({ result, onClose, setScreen, setSelectedFile }) {
   const [filter, setFilter] = useState("전체");
   const [page, setPage] = useState(1);
   const [selectedIssue, setSelectedIssue] = useState(result.issues[0] || null);
+  
+  const tableScrollRef = useRef(null);
+  const cellRefs = useRef({});
+  const headerRefs = useRef({});
+  
+  const [activeCellKey, setActiveCellKey] = useState("");
+  const [activeColumn, setActiveColumn] = useState("");
 
   const pageSize = 20;
-const totalPages = Math.max(1, Math.ceil(result.rows.length / pageSize));
-const pageRows = result.rows.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = Math.max(1, Math.ceil(result.rows.length / pageSize));
+  const pageRows = result.rows.slice((page - 1) * pageSize, page * pageSize);
 
 function getIssueRowNumber(issue) {
   const n = Number(issue?.rowIndex);
@@ -1676,16 +1924,81 @@ function getPageByExcelRow(rowNumber) {
   return Math.floor(targetIndex / pageSize) + 1;
 }
 
+
+
+function scrollToColumn(column) {
+  if (!column) return;
+
+  setActiveColumn(column);
+
+  setTimeout(() => {
+    const targetHeader = headerRefs.current[column];
+
+    if (!targetHeader) return;
+
+    targetHeader.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, 80);
+}
+
+function getCellKey(rowIndex, column) {
+  return `${rowIndex}__${column}`;
+}
+
 function handleSelectIssue(issue) {
   setSelectedIssue(issue);
 
   const rowNumber = getIssueRowNumber(issue);
+  const column = issue?.column;
 
-  if (rowNumber) {
+  setActiveCellKey("");
+  setActiveColumn("");
+
+  // 행 번호가 있는 이슈: 해당 셀로 이동
+  if (rowNumber && column) {
     const nextPage = getPageByExcelRow(rowNumber);
     setPage(nextPage);
+    setActiveCellKey(getCellKey(rowNumber, column));
+    setActiveColumn(column);
+    return;
+  }
+
+  // rowIndex가 "전체", "컬럼"인 이슈: 해당 컬럼으로 이동
+  if (column) {
+    scrollToColumn(column);
   }
 }
+
+useEffect(() => {
+  if (!selectedIssue) return;
+
+  const rowNumber = getIssueRowNumber(selectedIssue);
+  const column = selectedIssue.column;
+
+  if (!rowNumber || !column) return;
+
+  const cellKey = getCellKey(rowNumber, column);
+
+  const timer = setTimeout(() => {
+    const targetCell = cellRefs.current[cellKey];
+
+    if (!targetCell) {
+      scrollToColumn(column);
+      return;
+    }
+
+    targetCell.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "center",
+    });
+  }, 100);
+
+  return () => clearTimeout(timer);
+}, [selectedIssue, page]);
 
   const filteredIssues = result.issues.filter((issue) => {
     if (filter === "전체") return true;
@@ -1714,24 +2027,36 @@ function handleSelectIssue(issue) {
     return result.referenceColumns.includes(column);
   }
 
-  function issueClass(issue, column) {
-    if (isReferenceColumn(column)) return "bg-slate-100 text-slate-400";
-    if (!issue) return "";
+  function isGeneratedColumn(column) {
+    return result.generatedColumns?.includes(column);
+  }
 
+  function issueClass(issue, column) {
+    if (isGeneratedColumn(column)) {
+      return "bg-blue-50 text-blue-700 ring-1 ring-blue-100";
+    }
+  
+    if (isReferenceColumn(column)) {
+      return "bg-slate-100 text-slate-400";
+    }
+  
+    if (!issue) return "";
+  
     if (issue.type === "auto_cleaned") {
       return "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
     }
-
+  
     if (issue.type === "need_check") {
       return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
     }
-
+  
     if (issue.type === "required_error") {
       return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
     }
-
+  
     return "";
   }
+
 
   const canAnalyze = result.canAnalyze;
 
@@ -1786,87 +2111,148 @@ function handleSelectIssue(issue) {
               ))}
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div ref={tableScrollRef} className="flex-1 min-h-0 overflow-auto">
               <table className="min-w-full text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold border-b border-slate-100">
-                      행
-                    </th>
-                    {visibleHeaders.map((header) => (
+              <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 text-left font-semibold border-b border-slate-100 sticky left-0 bg-slate-50 z-20">
+                    행
+                  </th>
+
+                  {visibleHeaders.map((header) => {
+                    const isActiveColumn = activeColumn === header;
+                    const generated = isGeneratedColumn(header);
+                    const reference = isReferenceColumn(header);
+
+                    return (
                       <th
                         key={header}
+                        ref={(el) => {
+                          if (el) {
+                            headerRefs.current[header] = el;
+                          }
+                        }}
                         className={`px-3 py-2 text-left font-semibold border-b border-slate-100 whitespace-nowrap ${
-                          isReferenceColumn(header) ? "bg-slate-100 text-slate-400" : ""
-                        }`}
+                          generated
+                            ? "bg-blue-50 text-blue-700"
+                            : reference
+                              ? "bg-slate-100 text-slate-400"
+                              : ""
+                        } ${isActiveColumn ? "ring-2 ring-blue-400" : ""}`}
                       >
-                        {header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
+                        <div className="flex items-center gap-1.5">
+                          <span>{header}</span>
 
-                <tbody>
+                          {generated && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">
+                              생성
+                            </span>
+                          )}
+
+                          {reference && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-500 font-bold">
+                              참고
+                            </span>
+                          )}
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+
+              <tbody>
                 {pageRows.map((row, idx) => {
-                  const realRowIndex = row.__rowIndex ?? ((page - 1) * pageSize + idx + 2);
+                  const realRowIndex =
+                    row.__rowIndex ?? (page - 1) * pageSize + idx + 2;
 
                   return (
                     <tr key={realRowIndex} className="border-b border-slate-50">
-                        <td className="px-3 py-2 text-slate-400 bg-slate-50 sticky left-0">
-                          {realRowIndex}
-                        </td>
+                      <td className="px-3 py-2 text-slate-400 bg-slate-50 sticky left-0 z-10">
+                        {realRowIndex}
+                      </td>
 
-                        {visibleHeaders.map((header) => {
-                          const issue = getCellIssue(realRowIndex, header);
-                          const reference = isReferenceColumn(header);
+                      {visibleHeaders.map((header) => {
+                        const issue = getCellIssue(realRowIndex, header);
+                        const reference = isReferenceColumn(header);
+                        const generated = isGeneratedColumn(header);
 
-                          return (
-                            <td
-                              key={header}
-                              onClick={() => {
-                                if (issue) handleSelectIssue(issue);
-                                if (!issue && reference) {
-                                  setSelectedIssue(
-                                    result.issues.find(
-                                      (i) => i.type === "reference" && i.column === header
-                                    )
-                                  );
+                        const cellKey = getCellKey(realRowIndex, header);
+                        const isActiveCell = activeCellKey === cellKey;
+                        const isActiveColumn = activeColumn === header;
+
+                        return (
+                          <td
+                            key={header}
+                            ref={(el) => {
+                              if (el) {
+                                cellRefs.current[cellKey] = el;
+                              }
+                            }}
+                            onClick={() => {
+                              if (issue) {
+                                handleSelectIssue(issue);
+                                return;
+                              }
+
+                              if (reference || generated) {
+                                const columnIssue = result.issues.find(
+                                  (i) =>
+                                    i.column === header &&
+                                    (i.type === "reference" ||
+                                      i.type === "auto_cleaned")
+                                );
+
+                                if (columnIssue) {
+                                  handleSelectIssue(columnIssue);
+                                } else {
+                                  scrollToColumn(header);
                                 }
-                              }}
-                              className={`px-3 py-2 whitespace-nowrap cursor-pointer ${issueClass(
-                                issue,
-                                header
-                              )}`}
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <span>{String(row[header] ?? "")}</span>
+                              }
+                            }}
+                            className={`px-3 py-2 whitespace-nowrap cursor-pointer transition ${
+                              isActiveCell
+                                ? "ring-2 ring-blue-400 bg-blue-50 font-bold"
+                                : ""
+                            } ${
+                              !isActiveCell && isActiveColumn ? "bg-blue-50" : ""
+                            } ${issueClass(issue, header)}`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>{String(row[header] ?? "")}</span>
 
-                                {issue?.type === "auto_cleaned" && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">
-                                    정제
-                                  </span>
-                                )}
+                              {issue?.type === "auto_cleaned" && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">
+                                  정제
+                                </span>
+                              )}
 
-                                {issue?.type === "need_check" && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold">
-                                    확인
-                                  </span>
-                                )}
+                              {issue?.type === "need_check" && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold">
+                                  확인
+                                </span>
+                              )}
 
-                                {reference && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-500 font-bold">
-                                    참고
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                              {reference && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-500 font-bold">
+                                  참고
+                                </span>
+                              )}
+
+                              {generated && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">
+                                  생성
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
             </div>
 
             <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
@@ -1906,6 +2292,19 @@ function handleSelectIssue(issue) {
               <p className="text-xs font-bold text-slate-700 mb-3">
                 검수 항목 ({filteredIssues.length}건)
               </p>
+              {canAnalyze && result.needCheckCount > 0 && (
+                <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5 w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600 flex-shrink-0">
+                      i
+                    </div>
+                    <p className="text-[11px] text-blue-700 leading-relaxed">
+                      확인 필요 항목이 있지만 필수 오류는 없어 분석을 진행할 수 있습니다.
+                      다만 해당 값은 보수적으로 계산되거나 일부 지표 계산이 제한될 수 있습니다.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                 {filteredIssues.length === 0 ? (
@@ -2016,13 +2415,6 @@ function handleSelectIssue(issue) {
                 <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mt-3">
                   필수 오류가 있어 분석을 시작할 수 없습니다.
                   필수 컬럼 또는 필수값을 수정한 뒤 다시 업로드해주세요.
-                </p>
-              )}
-
-              {canAnalyze && result.needCheckCount > 0 && (
-                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
-                  확인 필요 항목이 있지만 필수 오류는 없어 분석을 진행할 수 있습니다.
-                  단, 확인 필요 값은 보수적으로 계산되거나 일부 지표 계산이 제한될 수 있습니다.
                 </p>
               )}
             </div>
