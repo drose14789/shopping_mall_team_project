@@ -1,5 +1,6 @@
 import { TODAY_DATA, TODAY_ACTION_GROUPS, TODAY_DIAGNOSIS_TYPES } from "../constants/data"; 
 import { actionBadge } from "../utils/helpers"; 
+import { useState } from "react"; 
 
 export default function TodayScreen({ setScreen, }) {
   const [activeGroup, setActiveGroup] = useState("전체");

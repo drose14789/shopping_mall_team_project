@@ -633,6 +633,11 @@ export default function PerformanceReportScreen({
   async function handleCompare() {
     if (!uploadFile) return;
   
+    if (!periodStart || !periodEnd) {
+      setErrorMessage("비교 분석을 시작하려면 비교 시작월과 비교 종료월을 모두 선택해주세요.");
+      return;
+    }
+  
     setIsComparing(true);
     setIsSavingAnalysis(true);
     setErrorMessage("");
@@ -664,6 +669,8 @@ export default function PerformanceReportScreen({
 
   const canStartCompare =
   !!uploadFile &&
+  !!periodStart &&
+  !!periodEnd &&
   baseRows.length > 0 &&
   !isComparing &&
   !isSavingAnalysis &&
@@ -836,6 +843,12 @@ export default function PerformanceReportScreen({
               </div>
             </div>
           </div>
+
+          {uploadFile && (!periodStart || !periodEnd) && (
+            <p className="mt-3 text-[11px] text-amber-600 font-medium">
+              비교 분석을 시작하려면 비교 시작월과 비교 종료월을 모두 선택해주세요.
+            </p>
+          )}
 
           <button
             onClick={handleCompare}

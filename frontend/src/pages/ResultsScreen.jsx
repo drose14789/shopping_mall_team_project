@@ -5,6 +5,7 @@ import { ProductDetailModal } from "../components/InspectionModal";
 
 export default function ResultsScreen({ setScreen, selectedFile }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [searchKeyword, setSearchKeyword] = useState("");
   const [page, setPage] = useState(0);
   const [resultsData, setResultsData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +103,26 @@ export default function ResultsScreen({ setScreen, selectedFile }) {
     return "bg-slate-50 text-slate-600 border-slate-200";
   }
 
-  const filtered = mappedData;
+  const filtered = mappedData.filter((row) => {
+    const keyword = searchKeyword.trim().toLowerCase();
+  
+    if (!keyword) return true;
+  
+    const recommendedAction =
+      recommendationMap[row.type] || "상품 상태를 점검해 주세요.";
+  
+    return [
+      row.name,
+      row.cat,
+      row.type,
+      recommendedAction,
+      row.reason,
+      row.product_id,
+      row.season,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(keyword));
+  });
 
   function getSummaryGroup(type = "") {
     const value = String(type);
@@ -257,33 +277,99 @@ export default function ResultsScreen({ setScreen, selectedFile }) {
 
       {/* Result table */}
       <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-800">
-              상품 액션 추천 결과 목록
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-1">
-              상품별 진단 유형과 추천 액션을 전체 결과 기준으로 확인할 수 있어요.
-            </p>
+        <div className="px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">
+                상품 액션 추천 결과 목록
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                상품별 진단 유형과 추천 액션을 전체 결과 기준으로 확인할 수 있어요.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setScreen("performanceReport")}
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-blue-600 transition rounded-lg hover:bg-blue-50 border border-blue-100 bg-blue-50/60"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M3 3v18h18" />
+                <path d="M7 15l4-4 3 3 5-7" />
+              </svg>
+              성과 변화 리포트
+            </button>
           </div>
 
-          <button
-            onClick={() => setScreen("performanceReport")}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-blue-600 transition rounded-lg hover:bg-blue-50 border border-blue-100 bg-blue-50/60"
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M3 3v18h18" />
-              <path d="M7 15l4-4 3 3 5-7" />
-            </svg>
-            성과 변화 리포트
-          </button>
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-md">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+
+              <input
+                type="text"
+                value={searchKeyword}
+                onChange={(e) => {
+                  setSearchKeyword(e.target.value);
+                  setPage(0);
+                }}
+                placeholder="상품명, 카테고리, 진단 유형, 추천 액션 검색"
+                className="w-full pl-9 pr-9 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition"
+              />
+
+              {searchKeyword && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchKeyword("");
+                    setPage(0);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition"
+                >
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-400 whitespace-nowrap">
+              {searchKeyword ? (
+                <>
+                  검색 결과{" "}
+                  <strong className="text-slate-700">{filtered.length}</strong>개
+                </>
+              ) : (
+                <>
+                  전체 <strong className="text-slate-700">{mappedData.length}</strong>개
+                </>
+              )}
+            </p>
+          </div>
         </div>
 
         {/* Table */}
@@ -309,10 +395,12 @@ export default function ResultsScreen({ setScreen, selectedFile }) {
               </svg>
             </div>
             <p className="text-sm font-semibold text-slate-500 mb-1">
-              해당 조건의 상품이 없습니다
+              {searchKeyword ? "검색 결과가 없습니다" : "해당 조건의 상품이 없습니다"}
             </p>
             <p className="text-xs text-slate-400">
-              다른 필터를 선택하거나 새 파일을 업로드해주세요.
+              {searchKeyword
+                ? "다른 상품명, 카테고리, 진단 유형으로 검색해보세요."
+                : "다른 필터를 선택하거나 새 파일을 업로드해주세요."}
             </p>
           </div>
         ) : (

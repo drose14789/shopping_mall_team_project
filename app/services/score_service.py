@@ -1,4 +1,5 @@
 from app.schemas.score_schema import ProductExcelRow
+from app.services.review_cr import attach_matched_reviews_to_products
 import pandas as pd
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -6,6 +7,7 @@ import os
 import scripts.db_setting as db
 from datetime import datetime
 import math
+import json
 
 def clean_nans(data):
     if isinstance(data, float):
@@ -159,6 +161,14 @@ def ensure_evaluation_table_exists(engine):
 
     with engine.begin() as conn:
         conn.execute(create_table_query)
+
+        try:
+            conn.execute(text("""
+                ALTER TABLE evaluation_results
+                ADD COLUMN matched_reviews TEXT
+            """))
+        except Exception:
+            pass
 
 
 def evaluate_single_excel_file(
@@ -499,6 +509,21 @@ def evaluate_single_excel_file(
             return_score=percentile_scores.get('return_stability', 50.0),
         )
 
+        review_target_product = {
+            "product_id": product_id,
+            "product_type": product_type,
+        }
+
+        try:
+            review_enriched = attach_matched_reviews_to_products([review_target_product])
+            matched_reviews = review_enriched[0].get("matched_reviews", {}) if review_enriched else {}
+        except Exception as e:
+            print(f"-> 리뷰 수집 실패 product_id={product_id}, product_type={product_type}: {e}")
+            matched_reviews = {}
+
+        matched_reviews_json = json.dumps(matched_reviews, ensure_ascii=False)
+        print("✅ matched_reviews_json:", matched_reviews_json[:300])
+
         base_ad_spend = 10000.0
 
         def score_to_modifier(percentile):
@@ -572,6 +597,7 @@ def evaluate_single_excel_file(
             'analysis_start_time': [analysis_start_time_val],
             'analysis_end_time': [analysis_end_time_val],
             'created_at': [analysis_time],
+            'matched_reviews': [matched_reviews_json],
         }
 
         result_df = pd.DataFrame(result_data)
@@ -595,6 +621,7 @@ def evaluate_single_excel_file(
             'percentile_scores': percentile_scores,
             'coaching_feedback': feedback,
             'product_type': product_type,
+            'matched_reviews': matched_reviews_json,
         })
 
     return clean_nans(file_results)

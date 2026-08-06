@@ -383,14 +383,72 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
             { tag: "전환 점검", text: "구매 전환 및 반품 데이터를 지속적으로 확인합니다." }
         ],
     };
-    const reviewData = product.matched_reviews 
-    ? JSON.parse(product.matched_reviews) 
-    : {};
-    const hasReviewData =
-    reviewData &&
-    Object.values(reviewData).some(
+    function parseMatchedReviews(value) {
+      if (!value) return {};
+    
+      try {
+        if (typeof value === "string") {
+          return JSON.parse(value);
+        }
+    
+        if (typeof value === "object") {
+          return value;
+        }
+    
+        return {};
+      } catch (error) {
+        console.error("matched_reviews 파싱 실패:", error, value);
+        return {};
+      }
+    }
+    
+    function normalizeReviewData(rawReviewData) {
+      // 1. 이미 { 키워드: 리뷰배열 } 형태인 경우
+      if (
+        rawReviewData &&
+        !Array.isArray(rawReviewData) &&
+        typeof rawReviewData === "object"
+      ) {
+        const normalized = {};
+    
+        Object.entries(rawReviewData).forEach(([keyword, reviews]) => {
+          if (Array.isArray(reviews)) {
+            normalized[keyword] = reviews;
+          }
+        });
+    
+        return normalized;
+      }
+    
+      // 2. [{ keyword, rating, contents }] 배열 형태인 경우
+      if (Array.isArray(rawReviewData)) {
+        return rawReviewData.reduce((acc, review) => {
+          const keyword = review.keyword || review.keyword_name || "기타";
+    
+          if (!acc[keyword]) {
+            acc[keyword] = [];
+          }
+    
+          acc[keyword].push(review);
+          return acc;
+        }, {});
+      }
+    
+      return {};
+    }
+    
+    const rawReviewData = parseMatchedReviews(product.matched_reviews);
+    const reviewData = normalizeReviewData(rawReviewData);
+    
+    const hasReviewData = Object.values(reviewData).some(
       (reviews) => Array.isArray(reviews) && reviews.length > 0
     );
+
+    console.log("product:", product);
+    console.log("product.matched_reviews:", product.matched_reviews);
+    console.log("rawReviewData:", rawReviewData);
+    console.log("reviewData:", reviewData);
+    console.log("hasReviewData:", hasReviewData);
 
     const bottleneckCauses = d.bottleneckCauses;
     const actionItems = d.actionItems;
