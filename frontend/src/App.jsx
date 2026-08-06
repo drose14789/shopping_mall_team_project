@@ -41,16 +41,38 @@ export default function App() {
                                     ? "쇼핑몰 법 규제 챗봇"
                                     : screen === "basis"
                                         ? "진단 기준"
-                                        : undefined}/>
-        {screen === "main" ? (<MainScreen setScreen={setScreen}/>) : screen === "upload" ? 
-        (<UploadScreen setScreen={setScreen} setSelectedFile={setSelectedFile} selectedFile={selectedFile}/>) : screen === "results" ? 
-        (<ResultsScreen setScreen={setScreen} selectedFile={selectedFile}/>) : screen === "detail" ? 
-        (<DetailScreen setScreen={setScreen}/>) : screen === "history" ? 
-        (<HistoryScreen setScreen={setScreen} setSelectedFile={setSelectedFile}/>) : screen === "today" ? 
-        (<TodayScreen setScreen={setScreen}/>) : screen === "diag" ? 
-        (<DiagScreen setScreen={setScreen}/>) : screen === "chat" ? 
-        (<ChatScreen setScreen={setScreen}/>) : screen === "basis" ? 
-        (<BasisScreen setScreen={setScreen}/>) : null}
+                                        : screen === "performanceReport"
+                                            ? "추천 이후 성과 변화 리포트"
+                                            : undefined}/>
+                                {screen === "main" ? (
+                        <MainScreen setScreen={setScreen} />
+                        ) : screen === "upload" ? (
+                        <UploadScreen
+                            setScreen={setScreen}
+                            setSelectedFile={setSelectedFile}
+                            selectedFile={selectedFile}
+                        />
+                        ) : screen === "results" ? (
+                        <ResultsScreen setScreen={setScreen} selectedFile={selectedFile} />
+                        ) : screen === "detail" ? (
+                        <DetailScreen setScreen={setScreen} />
+                        ) : screen === "history" ? (
+                        <HistoryScreen setScreen={setScreen} setSelectedFile={setSelectedFile} />
+                        ) : screen === "today" ? (
+                        <TodayScreen setScreen={setScreen} />
+                        ) : screen === "diag" ? (
+                        <DiagScreen setScreen={setScreen} />
+                        ) : screen === "chat" ? (
+                        <ChatScreen setScreen={setScreen} />
+                        ) : screen === "basis" ? (
+                        <BasisScreen setScreen={setScreen} />
+                        ) : screen === "performanceReport" ? (
+                        <PerformanceReportScreen
+                            setScreen={setScreen}
+                            selectedFile={selectedFile}
+                            setSelectedFile={setSelectedFile}
+                        />
+                        ) : null}
       </div>
     </div>);
 }

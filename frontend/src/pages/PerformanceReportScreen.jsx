@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { getClientUuid } from "../utils/helpers";
 
@@ -6,6 +6,12 @@ const METRIC_KEYS = [
   {
     key: "clickRate",
     label: "클릭률",
+    goodDirection: "up",
+    unit: "%",
+  },
+  {
+    key: "wishRate",
+    label: "찜 전환율",
     goodDirection: "up",
     unit: "%",
   },
@@ -116,10 +122,12 @@ function safeRate(numerator, denominator) {
 
 function getMetricValue(row, key) {
   if (key === "clickRate") return Number(row.clickRate || 0);
+  if (key === "wishRate") return Number(row.wishRate || 0);
   if (key === "cartRate") return Number(row.cartRate || 0);
   if (key === "purchaseRate") return Number(row.purchaseRate || 0);
   if (key === "roas") return Number(row.roas || 0);
   if (key === "returnRate") return Number(row.returnRate || 0);
+
   return 0;
 }
 
@@ -248,6 +256,7 @@ async function parseComparisonFile(file) {
       const returnCount = cleanNumber(obj[columnMap.returnCount]);
       const adSpend = cleanNumber(obj[columnMap.adSpend]);
       const orderAmount = cleanNumber(obj[columnMap.orderAmount]);
+      const wish = columnMap.wish ? cleanNumber(obj[columnMap.wish]) : 0;
 
       return {
         productId: String(obj[columnMap.productId] || "").trim(),
@@ -257,11 +266,13 @@ async function parseComparisonFile(file) {
         click,
         visit,
         cart,
+        wish,
         orderCount,
         returnCount,
         adSpend,
         orderAmount,
         clickRate: safeRate(click, exposure),
+        wishRate: safeRate(wish, visit),
         cartRate: safeRate(cart, visit),
         purchaseRate: safeRate(orderCount, visit),
         returnRate: safeRate(returnCount, orderCount),
@@ -277,6 +288,7 @@ function normalizeBaseRow(row) {
     productName: row.product_name || row.productName || "-",
     category: row.category || "-",
     clickRate: Number(row.calc_click_rate || row.calculatedMetrics?.click_rate || 0),
+    wishRate: Number(row.calc_wish_conv || row.calculatedMetrics?.wish_conv_rate || 0),
     cartRate: Number(row.calc_cart_conv || row.calculatedMetrics?.cart_conv_rate || 0),
     purchaseRate: Number(row.calc_conv_rate || row.calculatedMetrics?.conv_rate || 0),
     returnRate:
@@ -338,7 +350,11 @@ function buildComparisonRows(baseRows, nextRows) {
   }));
 }
 
-export default function PerformanceReportScreen({ setScreen, selectedFile }) {
+export default function PerformanceReportScreen({
+  setScreen,
+  selectedFile,
+  setSelectedFile,
+}) {
   const [baseRows, setBaseRows] = useState([]);
   const [baseLoading, setBaseLoading] = useState(true);
   const [uploadFile, setUploadFile] = useState(null);
@@ -347,6 +363,10 @@ export default function PerformanceReportScreen({ setScreen, selectedFile }) {
   const [isComparing, setIsComparing] = useState(false);
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
+  const [newAnalysisFileName, setNewAnalysisFileName] = useState("");
+  const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
+  const fileInputRef = useRef(null);
+  const [hasComparedCurrentFile, setHasComparedCurrentFile] = useState(false);
 
   React.useEffect(() => {
     const clientUuid = getClientUuid();
@@ -437,29 +457,218 @@ export default function PerformanceReportScreen({ setScreen, selectedFile }) {
     });
   }, [comparisonRows]);
 
+  function getSeasonFromMonth(monthValue = "") {
+    const month = Number(String(monthValue).split("-")[1]);
+  
+    if ([3, 4, 5].includes(month)) return "봄";
+    if ([6, 7, 8].includes(month)) return "여름";
+    if ([9, 10, 11].includes(month)) return "가을";
+    if ([12, 1, 2].includes(month)) return "겨울";
+  
+    return "";
+  }
+  
+  function makeBackendRows(nextRows) {
+    const season = getSeasonFromMonth(periodStart);
+  
+    return nextRows.map((row) => {
+      const unitPrice =
+        row.orderCount > 0 ? Math.round(row.orderAmount / row.orderCount) : 0;
+  
+      return {
+        상품ID: row.productId,
+        상품명: row.productName || `상품_${row.productId}`,
+        카테고리: row.category || "기타",
+        "분석 시즌": season,
+        노출수: row.exposure,
+        클릭수: row.click,
+        "상품 상세 방문수": row.visit,
+       "찜 유저수": row.wish || 0,
+        "장바구니 유저수": row.cart,
+        상품주문수: row.orderCount,
+        반품건수: row.returnCount,
+        광고과금액: row.adSpend,
+        주문금액: row.orderAmount,
+        상품단가: unitPrice,
+        "분석 시작월": periodStart || "",
+        "분석 종료월": periodEnd || "",
+      };
+    });
+  }
+  
+  function makeSafeFileName(fileName = "성과파일.xlsx") {
+    const baseName = fileName.replace(/\.[^/.]+$/, "");
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}${String(now.getDate()).padStart(2, "0")}_${String(
+      now.getHours()
+    ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+  
+    return `${baseName}_성과비교분석_${timestamp}.xlsx`;
+  }
+
+  async function checkAlreadyAnalyzedFile(fileName) {
+    const clientUuid = getClientUuid();
+  
+    if (!clientUuid || !fileName) return false;
+  
+    const response = await fetch(
+      `http://localhost:8000/score/results?client_uuid=${clientUuid}&file_name=${encodeURIComponent(
+        fileName
+      )}`
+    );
+  
+    if (!response.ok) {
+      return false;
+    }
+  
+    const data = await response.json();
+    const list = Array.isArray(data) ? data : data.results || [];
+  
+    return list.length > 0;
+  }
+  
+  async function saveNewFileAnalysis(nextRows) {
+    const clientUuid = getClientUuid();
+  
+    if (!clientUuid) {
+      throw new Error("client_uuid를 찾을 수 없습니다.");
+    }
+
+    const originalFileName = uploadFile?.name;
+
+  if (originalFileName) {
+    const alreadyAnalyzed = await checkAlreadyAnalyzedFile(originalFileName);
+
+    if (alreadyAnalyzed) {
+      setNewAnalysisFileName(originalFileName);
+
+      return {
+        fileName: originalFileName,
+        skipped: true,
+        message: "이미 분석된 파일이라 DB 저장은 건너뛰었습니다.",
+      };
+    }
+  }
+  
+    const backendRows = makeBackendRows(nextRows);
+  
+    if (backendRows.length === 0) {
+      throw new Error("백엔드로 저장할 새 파일 데이터가 없습니다.");
+    }
+  
+    const worksheet = XLSX.utils.json_to_sheet(backendRows);
+    const workbook = XLSX.utils.book_new();
+  
+    XLSX.utils.book_append_sheet(workbook, worksheet, "analysis");
+  
+    const excelArray = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array",
+    });
+  
+    const backendFileName = makeSafeFileName(uploadFile?.name);
+    const backendFile = new File([excelArray], backendFileName, {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+  
+    const formData = new FormData();
+    formData.append("files", backendFile);
+    formData.append("client_uuid", clientUuid);
+  
+    const response = await fetch("http://localhost:8000/score/evaluate-multiple", {
+      method: "POST",
+      body: formData,
+    });
+  
+    const responseText = await response.text();
+  
+    let data = null;
+  
+    try {
+      data = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      data = responseText;
+    }
+  
+    if (!response.ok) {
+      const detail =
+        typeof data === "string"
+          ? data
+          : data?.detail || "새 파일 분석 저장에 실패했습니다.";
+  
+      throw new Error(detail);
+    }
+  
+    setNewAnalysisFileName(backendFileName);
+  
+    return {
+      fileName: backendFileName,
+      data,
+    };
+  }
+
+  function handleSelectUploadFile(file) {
+    setUploadFile(file || null);
+    setComparisonRows([]);
+    setErrorMessage("");
+    setNewAnalysisFileName("");
+    setHasComparedCurrentFile(false);
+  }
+  
+  function handleRemoveUploadFile() {
+    setUploadFile(null);
+    setComparisonRows([]);
+    setErrorMessage("");
+    setNewAnalysisFileName("");
+    setHasComparedCurrentFile(false);
+  
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   async function handleCompare() {
     if (!uploadFile) return;
-
+  
     setIsComparing(true);
+    setIsSavingAnalysis(true);
     setErrorMessage("");
-
+    setNewAnalysisFileName("");
+  
     try {
       const nextRows = await parseComparisonFile(uploadFile);
+  
       const rows = buildComparisonRows(baseRows, nextRows);
       setComparisonRows(rows);
-
+  
       if (rows.length === 0) {
         setErrorMessage(
           "기준 파일과 새 파일에서 매칭되는 상품을 찾지 못했습니다. 상품ID 컬럼이 같은지 확인해주세요."
         );
+        return;
       }
+  
+      await saveNewFileAnalysis(nextRows);
+      setHasComparedCurrentFile(true);
     } catch (error) {
       console.error(error);
       setErrorMessage(error.message || "비교 분석 중 오류가 발생했습니다.");
     } finally {
       setIsComparing(false);
+      setIsSavingAnalysis(false);
     }
   }
+
+  const canStartCompare =
+  !!uploadFile &&
+  baseRows.length > 0 &&
+  !isComparing &&
+  !isSavingAnalysis &&
+  !hasComparedCurrentFile;
+
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-4">
@@ -533,23 +742,67 @@ export default function PerformanceReportScreen({ setScreen, selectedFile }) {
             이후 3개월 성과 파일을 업로드하면 기존 파일과 자동 비교합니다.
           </p>
 
-          <label className="flex flex-col items-center justify-center border-2 border-dashed border-blue-200 bg-blue-50/30 rounded-xl h-32 cursor-pointer hover:bg-blue-50 transition">
+          <div className="rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/30 p-4">
             <input
+              ref={fileInputRef}
               type="file"
               accept=".xlsx,.csv"
               className="hidden"
-              onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+              onChange={(e) => handleSelectUploadFile(e.target.files?.[0] || null)}
             />
-            <div className="w-10 h-10 rounded-xl bg-white border border-blue-100 flex items-center justify-center mb-2">
-              ⬆️
-            </div>
-            <p className="text-sm font-semibold text-blue-700">
-              {uploadFile ? uploadFile.name : "새 3개월 성과 파일 업로드"}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              예: 2026.04~2026.06 성과 파일
-            </p>
-          </label>
+
+            {!uploadFile ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-32 w-full flex-col items-center justify-center rounded-xl hover:bg-blue-50 transition"
+              >
+                <div className="w-10 h-10 rounded-xl bg-white border border-blue-100 flex items-center justify-center mb-2">
+                  ⬆️
+                </div>
+                <p className="text-sm font-semibold text-blue-700">
+                  새 3개월 성과 파일 업로드
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  예: 2026.04~2026.06 성과 파일
+                </p>
+              </button>
+            ) : (
+              <div className="rounded-xl bg-white border border-blue-100 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-blue-500 mb-1">
+                      업로드된 비교 파일
+                    </p>
+                    <p className="text-sm font-bold text-slate-700 truncate" title={uploadFile.name}>
+                      {uploadFile.name}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      이 파일을 기준 분석 파일과 상품ID로 비교합니다.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 rounded-lg border border-blue-100 bg-blue-50 text-blue-600 text-xs font-bold hover:bg-blue-100"
+                    >
+                      파일 변경
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleRemoveUploadFile}
+                      className="px-3 py-1.5 rounded-lg border border-rose-100 bg-rose-50 text-rose-600 text-xs font-bold hover:bg-rose-100"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-3 gap-3 mt-4">
             <div>
@@ -586,14 +839,18 @@ export default function PerformanceReportScreen({ setScreen, selectedFile }) {
 
           <button
             onClick={handleCompare}
-            disabled={!uploadFile || baseRows.length === 0 || isComparing}
+            disabled={!canStartCompare}
             className={`mt-4 w-full rounded-xl py-3 text-sm font-bold transition ${
-              !uploadFile || baseRows.length === 0 || isComparing
+              !canStartCompare
                 ? "bg-slate-100 text-slate-300 cursor-not-allowed"
                 : "bg-blue-600 text-white hover:bg-blue-700"
             }`}
           >
-            {isComparing ? "비교 분석 중..." : "비교 분석 시작"}
+            {isComparing || isSavingAnalysis
+              ? "비교 및 새 파일 분석 저장 중..."
+              : hasComparedCurrentFile
+                ? "현재 파일 비교 완료"
+                : "비교 분석 시작"}
           </button>
         </div>
       </div>
@@ -606,6 +863,28 @@ export default function PerformanceReportScreen({ setScreen, selectedFile }) {
 
       {comparisonRows.length > 0 && (
         <>
+        {newAnalysisFileName && (
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-5 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-blue-800">
+                  새 성과 파일 분석 저장 완료
+                </p>
+                <p className="text-xs text-blue-500 mt-1">
+                  분석 이력과 상품 액션 추천 결과 페이지에서 새 파일 결과를 확인할 수 있어요.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setSelectedFile(newAnalysisFileName);
+                  setScreen("results");
+                }}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700"
+              >
+                새 파일 결과 보기
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-4 gap-4">
             <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
               <p className="text-xs font-semibold text-blue-500">성과 개선 상품</p>
