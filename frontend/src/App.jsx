@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 // 공통 부품 및 네비게이션
 import { Sidebar } from './components/common/Sidebar';
 import { Topbar } from './components/common/Sidebar';
-
+import {UploadCloud, Sparkles, SearchCheck, History, Target, ChartNoAxesCombined, Bot, ClipboardCheck, TrendingUp, LayoutDashboard} from "lucide-react";
 // 화면(Page) 컴포넌트들
 import MainScreen from './pages/MainScreen';
 import UploadScreen from './pages/UploadScreen';
@@ -25,7 +25,9 @@ export default function App() {
         }}>
       <Sidebar screen={screen} setScreen={setScreen}/>
       <div className="flex flex-col flex-1 min-w-0">
-        <Topbar subtitle={screen === "upload"
+        <Topbar subtitle={screen === "main"
+            ? "메인 화면"
+            : screen === "upload"
             ? "상품 성과 파일 업로드"
             : screen === "results"
                 ? "상품 액션 추천 결과"
@@ -43,7 +45,30 @@ export default function App() {
                                         ? "진단 기준"
                                         : screen === "performanceReport"
                                             ? "추천 이후 성과 변화 리포트"
-                                            : undefined}/>
+                                            : undefined}
+              icon={
+    screen === "main"
+      ? LayoutDashboard
+      : screen === "upload"
+        ? UploadCloud
+        : screen === "results"
+            ? Sparkles
+            : screen === "detail"
+            ? SearchCheck
+            : screen === "history"
+                ? History
+                : screen === "today"
+                ? Target
+                : screen === "diag"
+                    ? ChartNoAxesCombined
+                    : screen === "chat"
+                    ? Bot
+                    : screen === "basis"
+                        ? ClipboardCheck
+                        : screen === "performanceReport"
+                        ? TrendingUp
+                        : null
+  }                                />
                                 {screen === "main" ? (
                         <MainScreen setScreen={setScreen} />
                         ) : screen === "upload" ? (
