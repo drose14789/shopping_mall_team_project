@@ -14,7 +14,7 @@ import TodayScreen from './pages/TodayScreen';
 import DiagScreen from './pages/DiagScreen';
 import ChatScreen from './pages/ChatScreen';
 import BasisScreen from './pages/BasisScreen';
-import PerformanceReportScreen from "./pages/PerformanceReportScreen";
+import PerformanceReportScreen from "./pages/PerformanceReportScreen.jsx";
 
 
 export default function App() {
