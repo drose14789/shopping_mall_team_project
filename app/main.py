@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.chat import router as chat_router
 from app.routers.score import router as score_router
+from app.routers.analysis import router as analysis_router
 
 
 app = FastAPI(
@@ -33,6 +34,8 @@ app.include_router(chat_router)
 # 데이터분석 API 연결
 app.include_router(score_router)
 
+# 상품 상세 LLM 요약 API 연결
+app.include_router(analysis_router)
 
 @app.get(
     "/",
