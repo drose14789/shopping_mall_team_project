@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import text
 import os
 import scripts.db_setting as db
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import math
 
 def clean_nans(data):
@@ -175,7 +175,9 @@ def evaluate_single_excel_file(
     file_results = []
 
     # 분석 시간 통일을 위해 함수 실행 시점의 타임스탬프 생성 (시간순 정렬용)
-    analysis_time = datetime.now()
+    KST = timezone(timedelta(hours=9))
+
+    analysis_time = datetime.now(KST)
 
     for idx, row in user_df.iterrows():
         if pd.isna(row.get('카테고리')) or pd.isna(row.get('노출수')):

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.chat import router as chat_router
 from app.routers.score import router as score_router
+from app.routers.today import router as today_router
 
 
 app = FastAPI(
@@ -32,6 +33,9 @@ app.include_router(chat_router)
 
 # 데이터분석 API 연결
 app.include_router(score_router)
+
+# 오늘의 추천 API 연결
+app.include_router(today_router)
 
 
 @app.get(
