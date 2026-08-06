@@ -1,74 +1,150 @@
-import { TODAY_DATA, TODAY_ACTION_GROUPS, TODAY_DIAGNOSIS_TYPES } from "../constants/data"; 
+import { useState, useEffect } from "react";
+import { TODAY_ACTION_GROUPS, TODAY_DIAGNOSIS_TYPES } from "../constants/data"; 
 import { actionBadge } from "../utils/helpers"; 
-import { useState } from "react"; 
+import { useState, useEffect } from "react";
+import { TODAY_ACTION_GROUPS, TODAY_DIAGNOSIS_TYPES } from "../constants/data";
+import { getClientUuid } from "../utils/helpers";
+import { ProductDetailModal } from "../components/InspectionModal";
 
-export default function TodayScreen({ setScreen, }) {
-  const [activeGroup, setActiveGroup] = useState("전체");
-  const [selectedDiagnosis, setSelectedDiagnosis] = useState("전체 진단 유형");
-  const hasData = true;
+export default function TodayScreen({ setScreen }) {
+    const [data, setData] = useState([]);
+    const [activeGroup, setActiveGroup] = useState("예산 확대");
+    const [selectedDiagnosis, setSelectedDiagnosis] = useState("전체 진단 유형");
+    const [showProductModal, setShowProductModal] = useState(false);
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const clientUuid = getClientUuid();
+    const hasData = data.length > 0;
 
-  const firstAction = TODAY_DATA[0];
-  const topActions = TODAY_DATA.slice(1, 4);
+    useEffect(() => {
 
-  const filtered = TODAY_DATA.filter((row) => {
-      const groupMatched =
-          activeGroup === "전체" || row.actionGroup === activeGroup;
+    fetch(`http://localhost:8000/today/recommend/${clientUuid}`)
+        .then((res)=>res.json())
+        .then((result)=>{
 
-      const diagnosisMatched =
+            const merged = [
+                ...(result.expand || []).map((item, index)=>({
+                    ...item,
+                    rank:index + 1,
+                    actionGroup:"예산 확대",
+                    action:"예산 확대",
+                    name:item.product_name,
+                    cat:item.category,
+                    diagnosisType:item.product_type
+                })),
+
+                ...(result.improve || []).map((item, index)=>({
+                    ...item,
+                    rank:index + 1,
+                    actionGroup:"개선 필요",
+                    action:"개선 후 재집행",
+                    name:item.product_name,
+                    cat:item.category,
+                    diagnosisType:item.product_type
+                })),
+
+                ...(result.reduce || []).map((item, index)=>({
+                    ...item,
+                    rank:index + 1,
+                    actionGroup:"광고 축소",
+                    action:"광고 축소",
+                    name:item.product_name,
+                    cat:item.category,
+                    diagnosisType:item.product_type
+                })),
+
+                ...(result.returnRisk || []).map((item, index)=>({
+                    ...item,
+                    rank:index + 1,
+                    actionGroup:"반품 리스크",
+                    action:"반품 리스크",
+                    name:item.product_name,
+                    cat:item.category,
+                    diagnosisType:item.product_type
+                }))
+            ];
+
+            setData(merged);
+
+        })
+        .catch((err)=>{
+            console.error(
+                "오늘의 추천 데이터 조회 실패",
+                err
+            );
+        });
+
+},[clientUuid]);
+
+    
+
+    const firstAction = data.find(
+    item => item.actionGroup === "예산 확대"
+);
+    const topActions = [
+    data.find(item => item.actionGroup === "개선 필요"),
+    data.find(item => item.actionGroup === "광고 축소"),
+    data.find(item => item.actionGroup === "반품 리스크"),
+].filter(Boolean);
+
+    const filtered = data.filter((row) => {
+    const groupMatched =
+        row.actionGroup === activeGroup;
+
+    const diagnosisMatched =
           selectedDiagnosis === "전체 진단 유형" ||
           row.diagnosisType === selectedDiagnosis;
 
       return groupMatched && diagnosisMatched;
   });
 
-  const actionMeta = (action) => {
-      if (action === "예산 확대") {
-          return {
-              label: "바로 예산 조정",
-              icon: "📈",
-              bg: "bg-blue-50",
-              border: "border-blue-200",
-              text: "text-blue-700",
-              todo: "광고 예산을 10~20% 소폭 증액한 뒤 3일간 ROAS와 반품률 변화를 확인하세요.",
-          };
-      }
+    const actionMeta = (action) => {
+    if (action === "예산 확대") {
+        return {
+            label: "예산 확대 추천",
+            icon: "📈",
+            bg: "bg-blue-50",
+            border: "border-blue-200",
+            text: "text-blue-700",
+            todo: "성과가 좋은 상품의 광고 노출을 확대하고 예산 증가 후 ROAS와 주문 변화를 확인하세요.",
+        };
+    }
 
-      if (action === "개선 후 재집행") {
-          return {
-              label: "상세페이지 개선",
-              icon: "🛠️",
-              bg: "bg-amber-50",
-              border: "border-amber-200",
-              text: "text-amber-700",
-              todo: "착용컷, 사이즈 정보, 혜택 문구를 보강한 뒤 광고 재집행을 준비하세요.",
-          };
-      }
+    if (action === "개선 후 재집행") {
+        return {
+            label: "개선 후 재집행",
+            icon: "🛠️",
+            bg: "bg-amber-50",
+            border: "border-amber-200",
+            text: "text-amber-700",
+            todo: "상품 상세페이지와 구매 방해 요소를 개선한 뒤 광고를 다시 집행해 성과 변화를 확인하세요.",
+        };
+    }
 
-      if (action === "광고 축소") {
-          return {
-              label: "광고비 누수 방지",
-              icon: "📉",
-              bg: "bg-rose-50",
-              border: "border-rose-200",
-              text: "text-rose-700",
-              todo: "광고비를 축소하거나 일시 보류하고 상품명, 대표 이미지, 상세페이지를 재점검하세요.",
-          };
-      }
+    if (action === "광고 축소") {
+        return {
+            label: "광고 축소 추천",
+            icon: "📉",
+            bg: "bg-rose-50",
+            border: "border-rose-200",
+            text: "text-rose-700",
+            todo: "효율이 낮은 광고 상품의 예산을 줄이고 광고비 대비 성과를 재점검하세요.",
+        };
+    }
 
-      return {
-          label: "상태 유지 점검",
-          icon: "✅",
-          bg: "bg-slate-50",
-          border: "border-slate-200",
-          text: "text-slate-600",
-          todo: "현재 예산을 유지하면서 지표 변화를 관찰하세요.",
-      };
-  };
-
+    if (action === "반품 리스크") {
+        return {
+            label: "반품 리스크 주의",
+            icon: "⚠️",
+            bg: "bg-red-50",
+            border: "border-red-200",
+            text: "text-red-700",
+            todo: "반품 발생 원인을 분석하고 상품 정보와 고객 불만 요소를 개선해 추가 반품을 예방하세요.",
+        };
+    }
+};
   const actionGroupBadge = (group) =>
       ({
           "예산 확대": "bg-blue-50 text-blue-700 border-blue-200",
-          "예산 유지": "bg-emerald-50 text-emerald-700 border-emerald-200",
           "개선 필요": "bg-amber-50 text-amber-700 border-amber-200",
           "광고 축소": "bg-rose-50 text-rose-700 border-rose-200",
           "반품 리스크": "bg-red-50 text-red-700 border-red-200",
@@ -164,7 +240,7 @@ export default function TodayScreen({ setScreen, }) {
                           기준 파일
                       </p>
                       <p className="text-sm font-bold text-slate-700">
-                          상품성과_20260520.xlsx
+                          {data[0]?.fileName}
                       </p>
                       <p className="text-[11px] text-slate-400 mt-1">
                           분석 이력의 가장 최근 파일 기준
@@ -173,81 +249,90 @@ export default function TodayScreen({ setScreen, }) {
               </div>
           </div>
 
-          {/* 오늘 1순위 액션 + 체크리스트 */}
           <div className="grid grid-cols-[minmax(0,1.55fr)_minmax(310px,0.45fr)] gap-4">
-              <div
-                  className={`rounded-2xl border ${firstMeta.border} ${firstMeta.bg} p-6 shadow-sm`}
-              >
-                  <div className="flex items-start justify-between gap-4 mb-5">
-                      <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-xl shadow-sm">
-                              {firstMeta.icon}
-                          </div>
+            <div
+                className={`rounded-2xl border ${firstMeta.border} ${firstMeta.bg} p-6 shadow-sm`}
+            >
+                <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center text-xl shadow-sm">
+                            {firstMeta.icon}
+                        </div>
 
-                          <div>
-                              <p className="text-[11px] font-bold text-slate-400 mb-1">
-                                  오늘 가장 먼저 할 일
-                              </p>
-                              <h3 className="text-xl font-bold text-slate-800">
-                                  {firstAction.name}
-                              </h3>
-                          </div>
-                      </div>
+                        <div>
+                            <p className="text-[11px] font-bold text-slate-400">
+                                오늘 가장 먼저 할 일
+                            </p>
+                            <p className={`text-xs font-bold ${firstMeta.text}`}>
+                                {firstAction.label}
+                            </p>
+                            <h3 className="text-xl font-bold text-slate-800">
+                                {firstAction.name}
+                            </h3>
+                        </div>
+                    </div>
 
-                      <span className="px-2.5 py-1 rounded-lg bg-white/80 border border-white text-[11px] font-bold text-slate-500">
-                          {firstAction.cat}
-                      </span>
-                  </div>
+                       <span className="px-2 py-1 rounded-lg bg-white/80 border border-white text-[11px] font-bold text-slate-500">
+                {firstAction.cat}
+            </span>
+        </div>
 
-                  <div className="rounded-2xl bg-white/75 border border-white p-4 mb-3">
-                      <div className="grid grid-cols-[82px_1fr] gap-3 items-center mb-3">
-                          <p className="text-[11px] font-bold text-slate-400">
-                              추천 액션
-                          </p>
-                          <div className="flex items-center gap-2 flex-wrap">
-                              <span
-                                  className={`text-xs px-2 py-1 rounded-md border font-semibold ${actionGroupBadge(
-                                      firstAction.actionGroup
-                                  )}`}
-                              >
-                                  {firstAction.actionGroup}
-                              </span>
-                              <span
-                                  className={`text-xs px-2 py-1 rounded-md border font-semibold ${diagnosisBadge(
-                                      firstAction.diagnosisType
-                                  )}`}
-                              >
-                                  {firstAction.diagnosisType}
-                              </span>
-                              <span className={`text-xs font-bold ${firstMeta.text}`}>
-                                  {firstMeta.label}
-                              </span>
-                          </div>
-                      </div>
 
-                      <div className="grid grid-cols-[82px_1fr] gap-3 items-start">
-                          <p className="text-[11px] font-bold text-slate-400">
-                              선정 근거
-                          </p>
-                          <p className="text-xs text-slate-600 leading-relaxed">
-                              {firstAction.reason}
-                          </p>
-                      </div>
-                  </div>
+        <div className="space-y-3">
 
-                  <div className="rounded-2xl bg-white/85 border border-white p-4">
-                      <p className="text-[11px] font-bold text-slate-400 mb-1.5">
-                          오늘 실행할 액션
-                      </p>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                          {firstMeta.todo}
-                      </p>
-                  </div>
+            <div>
+                <p className="text-[11px] font-bold text-slate-400 mb-1">
+                    추천 액션
+                </p>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                    <span
+                        className={`text-xs px-2 py-1 rounded-md border font-semibold ${actionGroupBadge(
+                            firstAction.actionGroup
+                        )}`}
+                    >
+                        {firstAction.actionGroup}
+                    </span>
+
+                    <span
+                        className={`text-xs px-2 py-1 rounded-md border font-semibold ${diagnosisBadge(
+                            firstAction.diagnosisType
+                        )}`}
+                    >
+                        {firstAction.diagnosisType}
+                    </span>
+                </div>
+            </div>
+
+                      <div>
+                <p className="text-[11px] font-bold text-slate-400 mb-1">
+                    선정 이유
+                </p>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                    {firstAction.reason}
+                </p>
+            </div>
+
+
+            <div className="rounded-xl bg-white/70 border border-white px-3 py-3">
+                <p className="text-[11px] font-bold text-slate-400 mb-1">
+                    오늘 할 일
+                </p>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                    {firstMeta.todo}
+                </p>
+            </div>
+
+        </div>
 
                   <button
-                      onClick={() => setScreen("detail")}
-                      className="mt-4 bg-white text-blue-600 border border-blue-100 rounded-xl px-4 py-2 text-xs font-bold hover:bg-blue-50 transition flex items-center gap-1"
-                  >
+                    onClick={() => {
+                        setSelectedProduct(firstAction);
+                        setShowProductModal(true);
+                    }}
+                    className="mt-4 w-40 bg-white text-blue-600 border border-blue-100 rounded-xl py-2 text-xs font-bold hover:bg-blue-50 transition flex items-center justify-center gap-1">
                       상세 진단 보기
                       <svg
                           width="11"
@@ -306,7 +391,7 @@ export default function TodayScreen({ setScreen, }) {
 
                   return (
                       <div
-                          key={row.rank}
+                          key={`${row.actionGroup}-${row.rank}`}
                           className={`rounded-2xl border ${meta.border} ${meta.bg} p-5 shadow-sm`}
                       >
                           <div className="flex items-start justify-between mb-4">
@@ -316,7 +401,7 @@ export default function TodayScreen({ setScreen, }) {
                                   </div>
                                   <div>
                                       <p className="text-[11px] font-bold text-slate-400">
-                                          오늘의 {row.rank}순위
+                                          오늘의 추천 확인 상품
                                       </p>
                                       <p className={`text-xs font-bold ${meta.text}`}>
                                           {meta.label}
@@ -376,7 +461,10 @@ export default function TodayScreen({ setScreen, }) {
                           </div>
 
                           <button
-                              onClick={() => setScreen("detail")}
+                              onClick={() => {
+                                        setSelectedProduct(row);
+                                        setShowProductModal(true);
+                                    }}
                               className="mt-4 w-full bg-white text-blue-600 border border-blue-100 rounded-xl py-2 text-xs font-bold hover:bg-blue-50 transition flex items-center justify-center gap-1"
                           >
                               상세 진단 보기
@@ -473,7 +561,7 @@ export default function TodayScreen({ setScreen, }) {
                       <div className="divide-y divide-slate-50">
                           {filtered.map((row) => (
                               <div
-                                  key={row.rank}
+                                  key={`${row.actionGroup}-${row.rank}`}
                                   className="grid grid-cols-[52px_minmax(0,1.35fr)_110px_150px_minmax(0,1fr)_82px] gap-4 px-5 py-4 hover:bg-slate-50/70 transition-colors items-center"
                               >
                                   <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-xs font-bold text-slate-500">
@@ -514,22 +602,25 @@ export default function TodayScreen({ setScreen, }) {
                                       {row.reason}
                                   </p>
 
-                                  <button
-                                      onClick={() => setScreen("detail")}
-                                      className="justify-self-end text-xs font-semibold text-blue-600 hover:text-blue-800 transition flex items-center gap-1"
-                                  >
-                                      상세 보기
-                                      <svg
-                                          width="11"
-                                          height="11"
-                                          viewBox="0 0 24 24"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeWidth="2.5"
-                                      >
-                                          <polyline points="9 18 15 12 9 6" />
-                                      </svg>
-                                  </button>
+                                   <button
+                                        onClick={() => {
+                                            setSelectedProduct(row);
+                                            setShowProductModal(true);
+                                        }}
+                                        className="justify-self-end text-xs font-semibold text-blue-600 hover:text-blue-800 transition flex items-center gap-1"
+                                    >
+                                        상세 보기
+                                        <svg
+                                            width="11"
+                                            height="11"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2.5"
+                                        >
+                                            <polyline points="9 18 15 12 9 6" />
+                                        </svg>
+                                    </button>
                               </div>
                           ))}
                       </div>
@@ -555,6 +646,15 @@ export default function TodayScreen({ setScreen, }) {
                   메인으로 돌아가기
               </button>
           </div>
+          {showProductModal && selectedProduct && (
+            <ProductDetailModal
+                product={selectedProduct}
+                onClose={() => {
+                    setShowProductModal(false);
+                    setSelectedProduct(null);
+                }}
+            />
+        )}
       </div>
   );
 }

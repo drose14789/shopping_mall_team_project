@@ -104,7 +104,7 @@ export default function MainScreen({ setScreen, }) {
             color: "rgba(255,255,255,0.9)",
             textShadow: "0 1px 4px rgba(30,58,138,0.2)",
         }}>
-            상품 성과 데이터를 분석해 광고 확대, 유지, 개선, 축소 등 16가지 유형 액션을 제안하고
+            상품 성과 데이터를 분석해 광고 확대, 유지, 개선, 축소 등 <br />16가지 유형 액션을 제안하고
             <br />
             쇼핑몰 운영에 필요한 법 규제 리스크까지 함께
             확인합니다.
@@ -274,12 +274,15 @@ export default function MainScreen({ setScreen, }) {
               최근 분석 요약
             </h3>
             <span className="text-[10px] text-slate-400">
-              2026.05.20 기준
+              {new Date()
+                .toISOString()
+                .split("T")[0]
+                .replaceAll("-", ".")} 기준
             </span>
           </div>
 
           <p className="text-[10px] text-slate-600 font-medium leading-relaxed mt-2 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-2">
-            최근 분석 결과에서 가장 많이 나온 추천 유형 4개를 요약했어요.
+            최근 분석 결과에서 가장 많이 나온 추천 <br />유형 4개를 요약했어요.
           </p>
         </div>
           <div className="space-y-3">

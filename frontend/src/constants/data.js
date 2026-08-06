@@ -415,9 +415,7 @@ export const TODAY_DATA = [
 ];
 
 export const TODAY_ACTION_GROUPS = [
-  "전체",
   "예산 확대",
-  "예산 유지",
   "개선 필요",
   "광고 축소",
   "반품 리스크",

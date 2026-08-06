@@ -10,6 +10,55 @@ import {
 import { actionBadge } from '../utils/helpers';
 import { getDetailData } from '../utils/productDetailHelpers';
 
+
+const API_BASE_URL = (
+    import.meta.env.VITE_API_URL ||
+    "http://127.0.0.1:8000"
+).replace(/\/$/, "");
+
+// 같은 상품을 다시 열거나 React 개발 모드에서 Effect가 두 번 실행돼도
+// 동일한 LLM 요청이 중복 실행되지 않도록 현재 브라우저 세션에서 캐시합니다.
+const analysisSummaryCache = new Map();
+
+function buildAnalysisPayload(product) {
+    return {
+        id: product?.id,
+        product_id: product?.product_id,
+        product_name: product?.product_name,
+        category: product?.category,
+        quarter: product?.quarter,
+        product_type: product?.product_type,
+        total_score: product?.total_score,
+
+        exposure_count: product?.exposure_count,
+        click_count: product?.click_count,
+        visit_count: product?.visit_count,
+        wish_user_count: product?.wish_user_count,
+        cart_user_count: product?.cart_user_count,
+        order_count: product?.order_count,
+        return_count: product?.return_count,
+        ad_spend: product?.ad_spend,
+        order_amount: product?.order_amount,
+        unit_price: product?.unit_price,
+
+        calc_click_rate: product?.calc_click_rate,
+        calc_wish_conv: product?.calc_wish_conv,
+        calc_cart_conv: product?.calc_cart_conv,
+        calc_conv_rate: product?.calc_conv_rate,
+        calc_return_stability: product?.calc_return_stability,
+        calc_roas: product?.calc_roas,
+
+        score_click_rate: product?.score_click_rate,
+        score_wish_conv: product?.score_wish_conv,
+        score_cart_conv: product?.score_cart_conv,
+        score_conv_rate: product?.score_conv_rate,
+        score_return_stability: product?.score_return_stability,
+        score_roas: product?.score_roas,
+
+        recommended_ad_spend: product?.recommended_ad_spend,
+    };
+}
+
 export function InspectionModal({ onClose, setScreen }) {
     const [selected, setSelected] = useState(0);
     const [filterStatus, setFilterStatus] = useState("all");
@@ -304,6 +353,9 @@ export function InspectionModal({ onClose, setScreen }) {
 }
 
 export function ProductDetailModal({ product, onClose, setScreen }) {
+    const [llmAnalysis, setLlmAnalysis] = useState(null);
+    const [llmLoading, setLlmLoading] = useState(false);
+    const [llmStarted, setLlmStarted] = useState(false);
 
     const d = {
         score: product.total_score,
@@ -383,75 +435,148 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
             { tag: "전환 점검", text: "구매 전환 및 반품 데이터를 지속적으로 확인합니다." }
         ],
     };
-    function parseMatchedReviews(value) {
-      if (!value) return {};
-    
-      try {
-        if (typeof value === "string") {
-          return JSON.parse(value);
-        }
-    
-        if (typeof value === "object") {
-          return value;
-        }
-    
-        return {};
-      } catch (error) {
-        console.error("matched_reviews 파싱 실패:", error, value);
-        return {};
-      }
-    }
-    
-    function normalizeReviewData(rawReviewData) {
-      // 1. 이미 { 키워드: 리뷰배열 } 형태인 경우
-      if (
-        rawReviewData &&
-        !Array.isArray(rawReviewData) &&
-        typeof rawReviewData === "object"
-      ) {
-        const normalized = {};
-    
-        Object.entries(rawReviewData).forEach(([keyword, reviews]) => {
-          if (Array.isArray(reviews)) {
-            normalized[keyword] = reviews;
-          }
-        });
-    
-        return normalized;
-      }
-    
-      // 2. [{ keyword, rating, contents }] 배열 형태인 경우
-      if (Array.isArray(rawReviewData)) {
-        return rawReviewData.reduce((acc, review) => {
-          const keyword = review.keyword || review.keyword_name || "기타";
-    
-          if (!acc[keyword]) {
-            acc[keyword] = [];
-          }
-    
-          acc[keyword].push(review);
-          return acc;
-        }, {});
-      }
-    
-      return {};
-    }
-    
-    const rawReviewData = parseMatchedReviews(product.matched_reviews);
-    const reviewData = normalizeReviewData(rawReviewData);
-    
-    const hasReviewData = Object.values(reviewData).some(
-      (reviews) => Array.isArray(reviews) && reviews.length > 0
-    );
 
-    console.log("product:", product);
-    console.log("product.matched_reviews:", product.matched_reviews);
-    console.log("rawReviewData:", rawReviewData);
-    console.log("reviewData:", reviewData);
-    console.log("hasReviewData:", hasReviewData);
+function parseMatchedReviews(value) {
+  if (!value) return {};
 
-    const bottleneckCauses = d.bottleneckCauses;
-    const actionItems = d.actionItems;
+  try {
+    if (typeof value === "string") {
+      return JSON.parse(value);
+    }
+
+    if (typeof value === "object") {
+      return value;
+    }
+
+    return {};
+  } catch (error) {
+    console.error("matched_reviews 파싱 실패:", error, value);
+    return {};
+  }
+}
+
+function normalizeReviewData(rawReviewData) {
+  if (
+    rawReviewData &&
+    !Array.isArray(rawReviewData) &&
+    typeof rawReviewData === "object"
+  ) {
+    const normalized = {};
+
+    Object.entries(rawReviewData).forEach(([keyword, reviews]) => {
+      if (Array.isArray(reviews)) {
+        normalized[keyword] = reviews;
+      }
+    });
+
+    if (rawReviewData._meta) {
+      normalized._meta = rawReviewData._meta;
+    }
+
+    return normalized;
+  }
+
+  if (Array.isArray(rawReviewData)) {
+    return rawReviewData.reduce((acc, review) => {
+      const keyword = review.keyword || review.keyword_name || "기타";
+
+      if (!acc[keyword]) {
+        acc[keyword] = [];
+      }
+
+      acc[keyword].push(review);
+      return acc;
+    }, {});
+  }
+
+  return {};
+}
+
+const rawReviewData = parseMatchedReviews(product.matched_reviews);
+const reviewData = normalizeReviewData(rawReviewData);
+const reviewMeta = reviewData?._meta || {};
+
+const hasReviewData = Object.values(reviewData).some(
+  (reviews) => Array.isArray(reviews) && reviews.length > 0
+);
+
+async function handleGenerateLlmAnalysis() {
+  if (llmLoading) {
+    return;
+  }
+
+  setLlmStarted(true);
+  setLlmLoading(true);
+
+  const cacheKey = String(
+    product?.id ??
+      product?.product_id ??
+      product?.product_name ??
+      "unknown-product"
+  );
+
+  try {
+    let cached = analysisSummaryCache.get(cacheKey);
+
+    if (!cached) {
+      const request = fetch(`${API_BASE_URL}/analysis/summary`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(buildAnalysisPayload(product)),
+      }).then(async (response) => {
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`AI 요약 API 오류: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json();
+
+        const validDiagnosis =
+          Array.isArray(data?.diagnosis_summary) &&
+          data.diagnosis_summary.length > 0;
+
+        const validActions =
+          Array.isArray(data?.recommended_actions) &&
+          data.recommended_actions.length > 0;
+
+        if (!validDiagnosis || !validActions) {
+          throw new Error("AI 요약 응답 형식이 올바르지 않습니다.");
+        }
+
+        return data;
+      });
+
+      analysisSummaryCache.set(cacheKey, request);
+      cached = request;
+    }
+
+    const data = await cached;
+    analysisSummaryCache.set(cacheKey, data);
+    setLlmAnalysis(data);
+  } catch (error) {
+    analysisSummaryCache.delete(cacheKey);
+    console.error("[analysis/summary] 생성 오류:", error);
+
+    setLlmAnalysis({
+      diagnosis_summary: d.bottleneckCauses,
+      recommended_actions: d.actionItems,
+      generated_by: "fallback",
+    });
+  } finally {
+    setLlmLoading(false);
+  }
+}
+
+const bottleneckCauses =
+  llmAnalysis?.diagnosis_summary ?? d.bottleneckCauses;
+
+const actionItems =
+  llmAnalysis?.recommended_actions ?? d.actionItems;
+
+
     const scoreColor = d.score >= 80
         ? "#2563EB"
         : d.score >= 60
@@ -876,6 +1001,41 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
               </div>
 
               {/* 진단 근거 요약 + 추천 액션 */}
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50/40 px-5 py-4">
+                <div>
+                  <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+                    AI 상품 운영 진단
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    버튼을 누르면 현재 상품의 분석 지표를 기반으로 진단 근거와 추천 액션을 생성합니다.
+                  </p>
+                </div>
+
+                {!llmStarted ? (
+                  <button
+                    type="button"
+                    onClick={handleGenerateLlmAnalysis}
+                    className="flex-shrink-0 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"
+                  >
+                    AI 진단 생성
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </button>
+                ) : llmLoading ? (
+                  <div className="flex-shrink-0 inline-flex items-center gap-2 rounded-lg bg-blue-100 px-4 py-2.5 text-xs font-bold text-blue-700">
+                    <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                    </svg>
+                    AI 진단 생성 중…
+                  </div>
+                ) : (
+                  <span className="flex-shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700">
+                    AI 진단 생성 완료
+                  </span>
+                )}
+              </div>
+
               <div className="grid grid-cols-[0.9fr_1.1fr] gap-4">
                 <div className="bg-white rounded-xl border border-slate-100 p-5">
                   <div className="mb-3">
@@ -888,15 +1048,41 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
                   </div>
 
                   <div className="space-y-2.5">
-                    {bottleneckCauses.map((cause, i) => (<div key={i} className="flex items-start gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2.5">
-                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white border border-slate-200 text-[10px] font-bold text-slate-400 flex items-center justify-center">
-                          {i + 1}
-                        </span>
-
-                        <p className="text-xs text-slate-600 leading-relaxed">
-                          {cause}
+                    {!llmStarted ? (
+                      <div className="rounded-lg bg-slate-50 border border-dashed border-slate-200 px-3 py-5 text-center">
+                        <p className="text-xs text-slate-500">
+                          위의 <strong className="text-blue-600">AI 진단 생성</strong> 버튼을 눌러 시작하세요.
                         </p>
-                      </div>))}
+                      </div>
+                    ) : llmLoading ? (
+                      <div className="flex items-center gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-4">
+                        <svg
+                          className="animate-spin flex-shrink-0"
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#64748B"
+                          strokeWidth="2.5"
+                        >
+                          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                        </svg>
+                        <p className="text-xs text-slate-500">
+                          상품 분석 데이터를 바탕으로 AI 진단 근거를 생성하고 있습니다.
+                        </p>
+                      </div>
+                    ) : (
+                      bottleneckCauses.map((cause, i) => (
+                        <div key={i} className="flex items-start gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2.5">
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white border border-slate-200 text-[10px] font-bold text-slate-400 flex items-center justify-center">
+                            {i + 1}
+                          </span>
+                          <p className="text-xs text-slate-600 leading-relaxed">
+                            {cause}
+                          </p>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -917,19 +1103,45 @@ export function ProductDetailModal({ product, onClose, setScreen }) {
                   </div>
 
                   <div className="space-y-2.5">
-                    {actionItems.map((action) => (<div key={action.tag} className="flex items-start gap-3 bg-white rounded-lg border border-blue-100 px-3 py-2.5">
-                        <span className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md ${action.tag === "예산 테스트" || action.tag === "유지 운영" || action.tag === "전환 점검" || action.tag === "확대 보류"
-                    ? "bg-blue-600 text-white"
-                    : action.tag === "전환 보강" || action.tag === "소폭 개선" || action.tag === "구매 설득" || action.tag === "소재 점검"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-slate-100 text-slate-600"}`}>
-                          {action.tag}
-                        </span>
-
-                        <p className="text-xs text-slate-700 leading-relaxed">
-                          {action.text}
+                    {!llmStarted ? (
+                      <div className="rounded-lg bg-white border border-dashed border-blue-200 px-3 py-5 text-center">
+                        <p className="text-xs text-blue-600">
+                          AI 진단을 시작하면 상품별 추천 액션이 표시됩니다.
                         </p>
-                      </div>))}
+                      </div>
+                    ) : llmLoading ? (
+                      <div className="flex items-center gap-2.5 bg-white rounded-lg border border-blue-100 px-3 py-4">
+                        <svg
+                          className="animate-spin flex-shrink-0"
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#2563EB"
+                          strokeWidth="2.5"
+                        >
+                          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                        </svg>
+                        <p className="text-xs text-blue-600">
+                          상품별 추천 액션을 자동 생성하고 있습니다.
+                        </p>
+                      </div>
+                    ) : (
+                      actionItems.map((action, index) => (
+                        <div key={`${action.tag}-${index}`} className="flex items-start gap-3 bg-white rounded-lg border border-blue-100 px-3 py-2.5">
+                          <span className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md ${action.tag === "예산 테스트" || action.tag === "유지 운영" || action.tag === "전환 점검" || action.tag === "확대 보류"
+                      ? "bg-blue-600 text-white"
+                      : action.tag === "전환 보강" || action.tag === "소폭 개선" || action.tag === "구매 설득" || action.tag === "소재 점검"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-slate-100 text-slate-600"}`}>
+                            {action.tag}
+                          </span>
+                          <p className="text-xs text-slate-700 leading-relaxed">
+                            {action.text}
+                          </p>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
