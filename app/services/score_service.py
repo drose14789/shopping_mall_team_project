@@ -320,11 +320,12 @@ def evaluate_single_excel_file(
                             WHERE category = :category
                               AND quarter = :quarter
                             """)
-
         with engine.connect() as conn:
             weight_df = pd.read_sql(weight_query, conn, params={"category": category_name, "quarter": quarter_val})
-            
+            print(f"조회 조건 - 카테고리: {category_name}, 분기: {quarter_val}")
+            print(f"1차 조회 결과 행 개수: {len(weight_df)}")
             if weight_df.empty:
+                print("1차 조회 실패, fallback('전체') 조회 시도...")
                 fallback_query = text("""
                                       SELECT indicator_1, indicator_2, correlation_value
                                       FROM category_correlations
@@ -332,34 +333,37 @@ def evaluate_single_excel_file(
                                         AND quarter = :quarter
                                       """)
                 weight_df = pd.read_sql(fallback_query, conn, params={"quarter": quarter_val})
+                print(f"Fallback 조회 결과 행 개수: {len(weight_df)}")
 
         raw_weights = {}
+        
+        # ✅ 수정된 매핑 테이블 (DB의 실제 한글 이름 기준)
         indicator_mapping = {
-            'click_rate': '상품클릭률',
-            'wish_conv_rate': '찜전환율',
-            '구매전환율': 'conv_rate',
-            '장바구니전환율': 'cart_conv_rate',
             'ROAS': 'roas',
-            '반품안정성': 'return_stability'
+            '구매전환율': 'conv_rate',
+            '반품안정성': 'return_stability',
+            '장바구니 전환율': 'cart_conv_rate',
+            '주문금액': 'order_amount',
+            '상품클릭률': 'click_rate',
+            '찜전환율': 'wish_conv_rate',
         }
 
         for _, w_row in weight_df.iterrows():
             ind1 = w_row['indicator_1']
             ind2 = w_row['indicator_2']
 
-            # 💡 핵심: 자기 자신과의 상관관계(1.0)는 가중치 계산에서 제외!
+            # 자기 자신과의 비교는 건너뜀 (예: ROAS와 ROAS)
             if ind1 == ind2:
                 continue
 
             corr_val = abs(float(w_row['correlation_value'])) if pd.notnull(w_row['correlation_value']) else 0.0
 
-            ind1_key = indicator_mapping.get(ind1)
             ind2_key = indicator_mapping.get(ind2)
 
-            if ind1_key:
-                raw_weights[ind1_key] = max(raw_weights.get(ind1_key, 0.0), corr_val)
             if ind2_key:
                 raw_weights[ind2_key] = max(raw_weights.get(ind2_key, 0.0), corr_val)
+                
+        print(f'raw_weights_______________: {raw_weights}')
 
         default_fallback_weights = {
             'click_rate': 0.15,
@@ -371,15 +375,23 @@ def evaluate_single_excel_file(
         }
 
         if len(raw_weights) >= 3:
-            total_corr_sum = sum(raw_weights.values())
+            # 1단계: 원본 raw_weights 값에 먼저 상한선(Max Cap) 적용 (예: 0.4를 넘지 못하게)
+            MAX_RAW_CAP = 0.4
+            capped_raw = {k: min(v, MAX_RAW_CAP) for k, v in raw_weights.items()}
+            
+            # 2단계: 캡이 적용된 값들을 기준으로 총합 계산 및 정규화
+            total_corr_sum = sum(capped_raw.values())
             if total_corr_sum > 0:
-                dynamic_weights = {k: v / total_corr_sum for k, v in raw_weights.items()}
+                dynamic_weights = {k: v / total_corr_sum for k, v in capped_raw.items()}
                 for k in default_fallback_weights.keys():
                     if k not in dynamic_weights:
                         dynamic_weights[k] = default_fallback_weights[k]
 
                 s_sum = sum(dynamic_weights.values())
-                dynamic_weights = {k: v / s_sum for k, v in dynamic_weights.items()}
+                if s_sum > 0:
+                    dynamic_weights = {k: v / s_sum for k, v in dynamic_weights.items()}
+                else:
+                    dynamic_weights = default_fallback_weights
             else:
                 dynamic_weights = default_fallback_weights
         else:
@@ -448,9 +460,9 @@ def evaluate_single_excel_file(
             'click_rate': 5.0,        # 상품클릭률 5%면 만점
             'wish_conv_rate': 6.0,    # 찜전환율 6%면 만점
             'cart_conv_rate': 7.0,    # 장바구니전환율 7%면 만점
-            'conv_rate': 3.0,         # 구매전환율 3%면 만점
+            'conv_rate': 2.0,         # 구매전환율 2%면 만점
             'return_stability': 100.0,# 반품안정성은 기존 로직 유지 (0~100)
-            'roas': 600.0,            # ROAS 500%면 만점
+            'roas': 600.0,            # ROAS 600%면 만점
         }
 
         for col in metric_labels.keys():
@@ -491,18 +503,38 @@ def evaluate_single_excel_file(
             'roas': 'ROAS',
         }
 
-        total_score = sum(
-            percentile_scores.get(col, 50.0) * dynamic_weights[col]
-            for col in evaluation_metrics.keys()
-        )
+        print(f"👉 [지표별 점수 현황]: {percentile_scores}")
+        print(f"👉 [적용된 가중치 전 현황]: {dynamic_weights}")
 
-        penalty = 0.0
-        if user_metrics['conv_rate'] < 1.0:
-            penalty += 15.0
-        if user_metrics['roas'] <= 100.0:
-            penalty += 10.0
-        total_score = max(0.0, total_score - penalty)
-        total_score = round(total_score, 2)
+        # 1. 조건 미달인 경우 가중치 축소
+        if user_metrics['conv_rate'] < 1.0 and 'conv_rate' in dynamic_weights:
+            dynamic_weights['conv_rate'] *= 0.6  
+                    
+        if user_metrics['roas'] <= 100.0 and 'roas' in dynamic_weights:
+            dynamic_weights['roas'] *= 0.6      
+
+        # 2. 점수가 실제로 존재하는(계산된) 지표들만 가중치 계산 대상로 필터링
+        # (주문금액 등 점수가 없는 항목은 dynamic_weights나 evaluation_metrics에서 제외하거나 필터링)
+        valid_metrics = [col for col in evaluation_metrics.keys() if col in percentile_scores]
+        valid_weights = {k: dynamic_weights[k] for k in valid_metrics if k in dynamic_weights}
+
+        # 3. 유효한 가중치들의 합이 1이 되도록 재정규화
+        total_w_sum = sum(valid_weights.values())
+        if total_w_sum > 0:
+            normalized_weights = {k: v / total_w_sum for k, v in valid_weights.items()}
+        else:
+            normalized_weights = valid_weights
+
+        print(f"👉 [적용된 가중치 현황]: {normalized_weights}")
+
+        # 4. 정규화된 가중치로 최종 총점 계산 (점수가 있는 것들끼리만 연산)
+        total_score = sum(
+            percentile_scores.get(col, 50.0) * normalized_weights.get(col, 0.0)
+            for col in valid_metrics
+        )
+        total_score = round(max(0.0, min(100.0, total_score)), 2)
+
+        print(f"👉 [최종 계산된 총점]: {total_score}")
 
         product_type = classify_product_type(
             click_score=percentile_scores.get('click_rate', 50.0),
@@ -524,7 +556,7 @@ def evaluate_single_excel_file(
             matched_reviews = {}
 
         matched_reviews_json = json.dumps(matched_reviews, ensure_ascii=False)
-        print("✅ matched_reviews_json:", matched_reviews_json[:300])
+        # print("✅ matched_reviews_json:", matched_reviews_json[:300])
 
         base_ad_spend = 10000.0
 
@@ -642,6 +674,6 @@ if __name__ == "__main__":
         )
         import json
 
-        print(json.dumps(results, ensure_ascii=False, indent=4))
+        # print(json.dumps(results, ensure_ascii=False, indent=4))
     except Exception as e:
         print(f"실행 중 에러 발생: {e}")

@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
-import scripts.db_setting as db
+import db_setting as db
 from sqlalchemy import text
 from sklearn.preprocessing import StandardScaler
 
@@ -10,12 +10,13 @@ def process_data(input_file, output_path, mapping_file, engine):
     mapping = pd.read_excel(mapping_file)
     mapping_dict = dict(zip(mapping.iloc[:, 0], mapping.iloc[:, 1]))
 
-    # 분석 대상 컬럼 (6개로 최적화)
+    # 분석 대상 컬럼 (7개로 최적화)
     mean_cols = [
         "주문금액",
         "구매전환율",
         "장바구니 전환율",
-        "상품단가",
+        "상품클릭률",
+        "찜전환율",
         "ROAS",
         "반품안정성"
     ]
