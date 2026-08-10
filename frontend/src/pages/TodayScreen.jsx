@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../constants/api";
 import { useState, useEffect } from "react";
 import { TODAY_ACTION_GROUPS, TODAY_DIAGNOSIS_TYPES } from "../constants/data"; 
 import { actionBadge } from "../utils/helpers"; 
@@ -15,7 +16,7 @@ export default function TodayScreen({ setScreen }) {
 
     useEffect(() => {
 
-    fetch(`http://localhost:8000/today/recommend/${clientUuid}`)
+    fetch(`${API_BASE_URL}/today/recommend/${clientUuid}`)
         .then((res)=>res.json())
         .then((result)=>{
 

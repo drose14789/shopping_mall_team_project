@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../constants/api";
 import React, { useState, useRef, useEffect } from "react";
 import {UploadIllustration} from '../components/common/Icons'; 
 import * as XLSX from "xlsx";
@@ -1838,14 +1839,14 @@ function InspectionModal({ result, onClose, setScreen, setSelectedFile }) {
         formData.append("client_uuid", clientUuid);
 
         console.log("🚀 백엔드로 전송 시작:", {
-          url: "http://localhost:8000/score/evaluate-multiple",
+          url: `${API_BASE_URL}/score/evaluate-multiple`,
           clientUuid: clientUuid,
           fileName: file.name,
           fileSize: file.size
         });
 
         // FastAPI 백엔드로 요청 보내기
-        const apiResponse = await fetch("http://localhost:8000/score/evaluate-multiple", {
+        const apiResponse = await fetch(`${API_BASE_URL}/score/evaluate-multiple`, {
           method: "POST",
           body: formData,
         });

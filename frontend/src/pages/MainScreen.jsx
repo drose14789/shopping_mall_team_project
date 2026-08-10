@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { REQUIRED_COLS, TABLE_DATA } from '../constants/data';
+import { API_BASE_URL } from '../constants/api';
 import { seasonBadgeStyle, actionBadge, getClientUuid} from '../utils/helpers'; 
 import { DashboardIllustration } from '../components/common/Icons'; 
 import { InspectionModal } from '../components/InspectionModal'; 
@@ -24,7 +25,7 @@ export default function MainScreen({ setScreen, }) {
     useEffect(() => {
       const client_uuid = getClientUuid();
       fetch(
-          `http://localhost:8000/score/history/${client_uuid}`
+          `${API_BASE_URL}/score/history/${client_uuid}`
       )
       .then(res => res.json())
       .then(data => {
@@ -48,7 +49,7 @@ export default function MainScreen({ setScreen, }) {
   useEffect(() => {
     const client_uuid = getClientUuid();
       fetch(
-          `http://localhost:8000/score/history/summary/${client_uuid}`
+          `${API_BASE_URL}/score/history/summary/${client_uuid}`
       )
       .then(res => res.json())
       .then(data => {

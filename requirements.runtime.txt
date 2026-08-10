@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+requests
+sentence-transformers
+qdrant-client
+ollama
+sqlalchemy
+pymysql
+pandas
+numpy
+openpyxl
+xlsxwriter
+python-multipart

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../constants/api";
 import React, { useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { getClientUuid } from "../utils/helpers";
@@ -378,7 +379,7 @@ export default function PerformanceReportScreen({
     }
 
     fetch(
-      `http://localhost:8000/score/results?client_uuid=${clientUuid}&file_name=${encodeURIComponent(
+      `${API_BASE_URL}/score/results?client_uuid=${clientUuid}&file_name=${encodeURIComponent(
         selectedFile
       )}`
     )
@@ -515,7 +516,7 @@ export default function PerformanceReportScreen({
     if (!clientUuid || !fileName) return false;
   
     const response = await fetch(
-      `http://localhost:8000/score/results?client_uuid=${clientUuid}&file_name=${encodeURIComponent(
+      `${API_BASE_URL}/score/results?client_uuid=${clientUuid}&file_name=${encodeURIComponent(
         fileName
       )}`
     );
@@ -578,7 +579,7 @@ export default function PerformanceReportScreen({
     formData.append("files", backendFile);
     formData.append("client_uuid", clientUuid);
   
-    const response = await fetch("http://localhost:8000/score/evaluate-multiple", {
+    const response = await fetch(`${API_BASE_URL}/score/evaluate-multiple`, {
       method: "POST",
       body: formData,
     });
