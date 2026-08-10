@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../constants/api";
 import React, { useState } from 'react';
 import { 
     MOCK_ISSUES, 
@@ -11,10 +12,7 @@ import { actionBadge } from '../utils/helpers';
 import { getDetailData } from '../utils/productDetailHelpers';
 
 
-const API_BASE_URL = (
-    import.meta.env.VITE_API_URL ||
-    "http://127.0.0.1:8000"
-).replace(/\/$/, "");
+
 
 // 같은 상품을 다시 열거나 React 개발 모드에서 Effect가 두 번 실행돼도
 // 동일한 LLM 요청이 중복 실행되지 않도록 현재 브라우저 세션에서 캐시합니다.

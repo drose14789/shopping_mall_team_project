@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "./api";
 
 import { HomeIcon, ChartIcon, DiagIcon, ChatIcon, BasisIcon } from '../components/common/Icons';
 
@@ -309,9 +310,7 @@ export const INIT_MESSAGES = [
     },
 ];
 
-export const CHAT_API_BASE_URL = (
-    import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
-).replace(/\/+$/, "");
+export const CHAT_API_BASE_URL = API_BASE_URL;
 export const CHAT_API_URL = `${CHAT_API_BASE_URL}/chat`;
 export const CHAT_STREAM_API_URL = `${CHAT_API_BASE_URL}/chat/stream`;
 export const CHAT_STORAGE_KEY = "online-shopping-legal-chat-messages";

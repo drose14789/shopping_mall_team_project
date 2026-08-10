@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../constants/api";
 import React, { useState, useEffect } from "react";
 import { RESULTS_PAGE_SIZE, recommendationMap } from "../constants/data";
 import { getClientUuid } from "../utils/helpers";
@@ -24,7 +25,7 @@ export default function ResultsScreen({ setScreen, selectedFile }) {
     }
 
     fetch(
-      `http://localhost:8000/score/results?client_uuid=${client_uuid}&file_name=${encodeURIComponent(
+      `${API_BASE_URL}/score/results?client_uuid=${client_uuid}&file_name=${encodeURIComponent(
         selectedFile
       )}`
     )
