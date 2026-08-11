@@ -5,10 +5,13 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY requirements.txt ./requirements.txt
+COPY requirements.runtime.txt ./requirements.runtime.txt
 
+# GPU가 없는 로컬 Docker / AWS m5a.large용 CPU 전용 PyTorch 설치
 RUN python -m pip install --no-cache-dir --upgrade pip \
-    && python -m pip install --no-cache-dir -r requirements.txt
+    && python -m pip install --no-cache-dir torch \
+       --index-url https://download.pytorch.org/whl/cpu \
+    && python -m pip install --no-cache-dir -r requirements.runtime.txt
 
 COPY search_qdrant.py ./search_qdrant.py
 COPY app ./app

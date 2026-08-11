@@ -6,7 +6,11 @@ export function getClientUuid(){
     let uuid = localStorage.getItem("client_uuid");
 
     if(!uuid){
-        uuid = crypto.randomUUID();
+        uuid =
+            typeof crypto !== "undefined" &&
+            typeof crypto.randomUUID === "function"
+                ? crypto.randomUUID()
+                : `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         localStorage.setItem("client_uuid", uuid);
     }
 

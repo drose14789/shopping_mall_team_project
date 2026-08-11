@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { HISTORY_PAGE_SIZE } from "../constants/data";
+import { API_BASE_URL } from "../constants/api";
 import { getSeasonStyle, getClientUuid } from "../utils/helpers";
 
 export default function HistoryScreen({ setScreen, setSelectedFile }) {
@@ -9,7 +10,7 @@ export default function HistoryScreen({ setScreen, setSelectedFile }) {
   useEffect(() => {
     const clientUuid = getClientUuid();
 
-    fetch(`http://localhost:8000/score/history/${clientUuid}`)
+    fetch(`${API_BASE_URL}/score/history/${clientUuid}`)
       .then((res) => res.json())
       .then((data) => {
         console.log("History 데이터:", data);
