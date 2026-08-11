@@ -305,12 +305,12 @@ def evaluate_single_excel_file(
             return_stability_val = 50.0
 
         user_metrics = {
-            'click_rate': (click / exposure * 100) if exposure > 0 else 0.0,
-            'wish_conv_rate': (wish / visit * 100) if visit > 0 else 0.0,
-            'cart_conv_rate': (cart / visit * 100) if visit > 0 else 0.0,
-            'conv_rate': (order_cnt / visit * 100) if visit > 0 else 0.0,
+            'click_rate': round((click / exposure * 100), 2) if exposure > 0 else 0.0,
+            'wish_conv_rate': round((wish / visit * 100), 2) if visit > 0 else 0.0,
+            'cart_conv_rate': round((cart / visit * 100), 2) if visit > 0 else 0.0,
+            'conv_rate': round((order_cnt / visit * 100), 2) if visit > 0 else 0.0,
             'return_stability': round(return_stability_val, 2),
-            'roas': (order_amount / ad_cost * 100) if ad_cost > 0 else 0.0,
+            'roas': round((order_amount / ad_cost * 100), 2) if ad_cost > 0 else 0.0,
             'unit_price': item_price_val,
         }
 
@@ -487,7 +487,7 @@ def evaluate_single_excel_file(
                     else:
                         # 2. 설정해둔 고정 만점 기준(Cap)과 비교하여 점수 산출
                         max_limit = metric_caps.get(col, 10.0)
-                        calculated_score = (user_val / max_limit) * 100.0
+                        calculated_score = round((user_val / max_limit) * 100.0, 2)
                         
                         # 3. 최소 5점은 주되, 100점을 초과하지 않도록 캡(Cap) 설정
                         percentile_scores[col] = round(min(100.0, max(5.0, calculated_score)), 1)

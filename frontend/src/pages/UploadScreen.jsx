@@ -1090,7 +1090,7 @@ export default function UploadScreen({ result, setScreen, selectedFile, setSelec
     }
     function handleTemplateDownload() {
         const link = document.createElement("a");
-        link.href = "/templates/actionfit_upload_template_v2.xlsx";
+        link.href = "/templates/샘플 템플릿.xlsx";
         link.download = "ActionFit_AI_상품성과_업로드_템플릿.xlsx";
         document.body.appendChild(link);
         link.click();
