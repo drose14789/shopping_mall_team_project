@@ -45,7 +45,7 @@
     </div>
 	
 
-[![ActionFit_AI_팀프로젝트.pptx](https://img.shields.io/badge/Presentation-PPTX-blue)](https://github.com/user-attachments/files/31153974/ActionFit_AI_.pptx)
+[![ActionFit_AI.pptx](https://img.shields.io/badge/Presentation-PPTX-blue)](https://github.com/user-attachments/files/31153974/ActionFit_AI_.pptx)[![AWS](https://img.shields.io/badge/Live-Demo-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white)](https://actionfit-ai.duckdns.org/)
 
 ## 📑 목차
 
