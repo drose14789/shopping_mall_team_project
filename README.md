@@ -45,8 +45,7 @@
     </div>
 	
 
-[![PPTX](https://img.shields.io/badge/Presentation-PPTX-blue)](https://github.com/user-attachments/files/24443148/1st_project.3.pptx)
-
+[![ActionFit_AI_팀프로젝트.pptx](https://img.shields.io/badge/Presentation-PPTX-blue)](https://github.com/user-attachments/files/31153974/ActionFit_AI_.pptx)
 
 ## 📑 목차
 
