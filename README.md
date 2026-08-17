@@ -49,12 +49,13 @@
 
 
 ## 📑 목차
+
 [01. 프로젝트 개요 / Project Overview](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#project-overview)<br>
-[02. 기술 구조 및 아키텍처 / Tech Stack & Architecture](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#tech-architecture)<br>
-[03. 오늘의 추천 액션 / Today's Recommended Actions](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#data-analysis)<br>
-[04. 데이터 분석 / Data Analysis](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#recommended-action)<br>
-[05. LLM 법률 규제 챗봇 / LLM Legal & Regulatory Chatbot](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#llm-rag-chatbot)<br>
-[06. 프로젝트 회고 / Project Retrospective](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#retrospective)<br>
+[02. 기술 구조 및 아키텍처 / Tech Stack & Architecture](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#tech-stack--architecture)<br>
+[03. 오늘의 추천 액션 / Today's Recommended Actions](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#todays-recommended-actions)<br>
+[04. 데이터 분석 / Data Analysis](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#data-analysis)<br>
+[05. LLM 법률 규제 챗봇 / LLM Legal & Regulatory Chatbot](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#llm-legal--regulatory-chatbot)<br>
+[06. 프로젝트 회고 / Project Retrospective](https://github.com/drose14789/shopping_mall_team_project?tab=readme-ov-file#project-retrospective)<br>
 
 ## Project Overview
 
