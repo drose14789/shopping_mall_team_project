@@ -131,7 +131,7 @@
 
 <div>
 
-[![Demo vid](https://img.youtube.com/vi/v=jgcC-TXJ0RsGZhJtxeNO4U/0.jpg)](https://www.youtube.com/watch?v=jgcC-TXJ0Rs)
+[![Demo video](https://img.youtube.com/vi/jgcC-TXJ0Rs/hqdefault.jpg)](https://www.youtube.com/watch?v=jgcC-TXJ0Rs)
 *클릭하면 데모 영상을 볼 수 있습니다.*
 
 
